@@ -3,6 +3,7 @@ from game.ui.helpers import (
     STATUS_COLOR,
     draw_bar,
     draw_camera_preview,
+    draw_score,
     draw_status_line,
     draw_text_centered,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "ScreenManager",
     "draw_bar",
     "draw_camera_preview",
+    "draw_score",
     "draw_status_line",
     "draw_text_centered",
 ]

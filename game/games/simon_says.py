@@ -68,6 +68,10 @@ class simonsays(FaceMinigame):
             Action("Face Forward", "Return to the centre when the presenter is speaking"),
         )
 
+    @property
+    def negative_progress(self) -> float:
+        return 1.0 - self.done / TARGET_TURNS
+
     def start(self) -> None:
         super().start()
         self.done = 0

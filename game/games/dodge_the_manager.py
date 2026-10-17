@@ -67,6 +67,10 @@ class DodgeTheManager(FaceMinigame):
             Action("Tilt Right", "Tilt your head right to dodge the manager"),
         )
 
+    @property
+    def negative_progress(self) -> float:
+        return self.peak_caught
+
     def start(self) -> None:
         super().start()
         self.elapsed = 0.0
@@ -79,6 +83,7 @@ class DodgeTheManager(FaceMinigame):
         self.side = random.choice((-1, 1))
         self.manager_u = -0.2
         self.caught = 0.0
+        self.peak_caught = 0.0
         self.encounters = 0
         self.bubble_t = 0.0
 
@@ -100,6 +105,7 @@ class DodgeTheManager(FaceMinigame):
         self.progress = min(1.0, self.elapsed / WALK_SECONDS)
         self._move_player(dt)
         self._update_manager(dt)
+        self.peak_caught = max(self.peak_caught, self.caught)
         if self.caught >= 1.0:
             self.finish(False)
         elif self.progress >= 1.0:

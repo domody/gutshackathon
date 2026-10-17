@@ -52,6 +52,10 @@ class Dalgona(Minigame):
             Action("Sign", "Pinch thumb and index to put pen to paper"),
         )
 
+    @property
+    def negative_progress(self) -> float:
+        return self.max_off_length / (MAX_OFF_LINE * self.screen.get_height())
+
     def start(self) -> None:
         super().start()
         width, height = self.screen.get_size()
@@ -69,6 +73,7 @@ class Dalgona(Minigame):
         self.pinching = False
         self.hand_lost = False
         self.off_length = 0.0
+        self.max_off_length = 0.0
         self.samples: list[tuple[float, float]] = []
         self.covered: list[bool] = []
         self.strokes: list[list[tuple[float, float, bool]]] = []
@@ -267,6 +272,7 @@ class Dalgona(Minigame):
                         self.covered[sample_index] = True
             else:
                 self.off_length += step_length
+                self.max_off_length = max(self.max_off_length, self.off_length)
             self.strokes[-1].append((point[0], point[1], on_line))
 
     def draw(self, screen: pygame.Surface) -> None:

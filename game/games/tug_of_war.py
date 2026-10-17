@@ -60,6 +60,10 @@ class TugOfWar(CalibratedMinigame):
             Action("Right Pull", "Reach, make a fist, then pull your right hand to your chest"),
         )
 
+    @property
+    def negative_progress(self) -> float:
+        return 1.0 - self.best_extraction / 100.0
+
     def start(self) -> None:
         super().start()
         self.result: bool | None = None
@@ -67,6 +71,7 @@ class TugOfWar(CalibratedMinigame):
         self.elapsed = 0.0
         self.intro_timer = INTRO_SECONDS
         self.extraction = 0.0
+        self.best_extraction = 0.0
         self.body_visible = False
         self.expected_side: str | None = None
         self.armed_sides: set[str] = set()
@@ -133,6 +138,7 @@ class TugOfWar(CalibratedMinigame):
 
         if self.idle_time >= RESISTANCE_DELAY and self.extraction > 0:
             self.extraction = max(0.0, self.extraction - PRINTER_RESISTANCE * dt)
+        self.best_extraction = max(self.best_extraction, self.extraction)
 
         if self.elapsed >= self.next_message:
             messages = ("Please wait.", "Still waiting.", "PC LOAD LETTER.", "Paper jam.")
