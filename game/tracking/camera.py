@@ -37,6 +37,7 @@ class CameraTracker(ABC):
     stale_seconds = 0.5      # no detection for this long -> reading becomes None
     smoothing = 0.5          # 0..1, higher = snappier
     preview_size = (160, 120)
+    max_fps: float | None = None   # cap the capture loop (None = as fast as frames arrive)
 
     def __init__(self, camera_index: int = 0) -> None:
         self.camera_index = camera_index
@@ -60,6 +61,7 @@ class CameraTracker(ABC):
             self.error = "could not open webcam"
             print(f"{self.label}: OFF -", self.error)
             return
+        self._configure_capture(cap)
         self._cap = cap
         if not self._setup():
             print(f"{self.label}: OFF -", self.error)
@@ -87,6 +89,9 @@ class CameraTracker(ABC):
     def _setup(self) -> bool:
         """Create the detector and set self.backend. Return False if unavailable."""
 
+    def _configure_capture(self, cap) -> None:
+        """Optionally set resolution, buffering, etc. on the opened camera."""
+
     def _teardown(self) -> None:
         """Release detectors created in _setup()."""
 
@@ -98,6 +103,7 @@ class CameraTracker(ABC):
     def _loop(self) -> None:
         pw, ph = self.preview_size
         while self._running:
+            started = time.monotonic()
             ok, frame = self._cap.read()
             if not ok:
                 time.sleep(0.01)
@@ -115,6 +121,9 @@ class CameraTracker(ABC):
             preview = cv2.cvtColor(small, cv2.COLOR_BGR2RGB).tobytes()
             with self._lock:
                 self._preview = preview
+
+            if self.max_fps:
+                time.sleep(max(0.0, 1 / self.max_fps - (time.monotonic() - started)))
 
     def _is_fresh(self, stamp: float, now: float | None = None) -> bool:
         return (time.time() if now is None else now) - stamp < self.stale_seconds

@@ -35,6 +35,14 @@ VISIBILITY_THRESHOLD = 0.48
 MIN_SHOULDER_WIDTH = 0.055   # smaller than this and the player is too far away
 
 
+def landmark_visible(point) -> bool:
+    """True if a pose landmark is confidently inside (or just outside) the frame."""
+    return (getattr(point, "visibility", 1.0) >= VISIBILITY_THRESHOLD
+            and getattr(point, "presence", 1.0) >= VISIBILITY_THRESHOLD
+            and -0.08 <= point.x <= 1.08
+            and -0.08 <= point.y <= 1.08)
+
+
 class BodyTracker(CameraTracker):
     label = "Body tracking"
 
@@ -108,13 +116,6 @@ class BodyTracker(CameraTracker):
         res = self._landmarker.detect(img)
         return res.pose_landmarks[0] if res.pose_landmarks else None
 
-    @staticmethod
-    def _visible(point) -> bool:
-        return (getattr(point, "visibility", 1.0) >= VISIBILITY_THRESHOLD
-                and getattr(point, "presence", 1.0) >= VISIBILITY_THRESHOLD
-                and -0.08 <= point.x <= 1.08
-                and -0.08 <= point.y <= 1.08)
-
     def _lose(self) -> None:
         """No usable body this frame: the reading is None until the next good one."""
         self._previous = None
@@ -128,16 +129,16 @@ class BodyTracker(CameraTracker):
             self._lose()
             return []
 
-        marks = [(pts[i].x, pts[i].y) for i in MARK_IDS if self._visible(pts[i])]
+        marks = [(pts[i].x, pts[i].y) for i in MARK_IDS if landmark_visible(pts[i])]
         width = math.dist((pts[LEFT_SHOULDER].x, pts[LEFT_SHOULDER].y),
                           (pts[RIGHT_SHOULDER].x, pts[RIGHT_SHOULDER].y))
         # Head and shoulders show the player is there; hands may leave the frame.
-        if width < MIN_SHOULDER_WIDTH or not all(self._visible(pts[i]) for i in BODY_IDS):
+        if width < MIN_SHOULDER_WIDTH or not all(landmark_visible(pts[i]) for i in BODY_IDS):
             self._lose()
             return marks
-        hands = all(self._visible(pts[i]) for i in HAND_IDS)
+        hands = all(landmark_visible(pts[i]) for i in HAND_IDS)
 
-        current = {i: (pts[i].x, pts[i].y) for i in TRACKED_IDS if self._visible(pts[i])}
+        current = {i: (pts[i].x, pts[i].y) for i in TRACKED_IDS if landmark_visible(pts[i])}
         motion = pump = 0.0
         dt = now - self._previous_time
         if self._previous is not None and 1 / 120 <= dt <= 0.2:

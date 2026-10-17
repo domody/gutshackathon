@@ -1,10 +1,11 @@
-"""Hand tracking: index-fingertip position and a thumb-index pinch (MediaPipe HandLandmarker)."""
+"""Hand tracking: index-fingertip position, thumb-index pinch and open palm / fist (MediaPipe)."""
 
 from __future__ import annotations
 
 import math
 import os
 import time
+from collections import Counter, deque
 
 import cv2
 import numpy as np
@@ -24,6 +25,33 @@ PINCH_ON = 0.30            # thumb-index gap / palm size to start a pinch
 PINCH_OFF = 0.45           # ...and to release it (hysteresis)
 FRAME_MARGIN = 0.01        # camera border that maps to the screen edge
 
+# (fingertip id, knuckle id, "extended" threshold). Tip-to-knuckle distance over palm size
+# is ~1.0 for a straight finger and ~0.4 when curled.
+FINGERS = ((8, 5, 0.80), (12, 9, 0.85), (16, 13, 0.80), (20, 17, 0.62))
+CURLED_RATIO = 0.55
+VOTE_FRAMES = 5            # a gesture must win 3 of the last 5 frames: kills flicker
+VOTES_NEEDED = 3
+
+
+def classify_gesture(pts, w: int, h: int) -> str | None:
+    """'palm', 'fist', or None when the hand is ambiguous (mid-transition)."""
+    def dist(a, b):
+        return math.hypot((a.x - b.x) * w, (a.y - b.y) * h)
+
+    palm_size = dist(pts[WRIST], pts[MIDDLE_MCP])
+    if palm_size < 1e-3:
+        return None
+    extended = curled = 0
+    for tip, knuckle, threshold in FINGERS:
+        ratio = dist(pts[tip], pts[knuckle]) / palm_size
+        extended += ratio > threshold
+        curled += ratio < CURLED_RATIO
+    if extended >= 4 or (extended == 3 and curled == 0):
+        return "palm"
+    if curled >= 3 and extended == 0:
+        return "fist"
+    return None
+
 
 class HandTracker(CameraTracker):
     label = "Hand tracking"
@@ -36,6 +64,9 @@ class HandTracker(CameraTracker):
         self._pos: tuple[float, float] | None = None
         self._pinch = False
         self._time = 0.0
+        self._votes: deque = deque(maxlen=VOTE_FRAMES)
+        self._gesture: str | None = None
+        self._gesture_time = 0.0
 
     def _setup(self) -> bool:
         if mp is None:
@@ -65,8 +96,11 @@ class HandTracker(CameraTracker):
         img = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb))
         res = self._landmarker.detect(img)
         if not res.hand_landmarks:
+            self._vote(None)
             return []
         pts = res.hand_landmarks[0]
+        h, w = frame_bgr.shape[:2]
+        self._vote(classify_gesture(pts, w, h))
         palm = math.dist((pts[WRIST].x, pts[WRIST].y), (pts[MIDDLE_MCP].x, pts[MIDDLE_MCP].y))
         gap = math.dist((pts[THUMB_TIP].x, pts[THUMB_TIP].y), (pts[INDEX_TIP].x, pts[INDEX_TIP].y))
         ratio = gap / max(palm, 1e-4)
@@ -82,6 +116,21 @@ class HandTracker(CameraTracker):
             self._time = now
             self._pinch = ratio < (PINCH_OFF if self._pinch else PINCH_ON)
         return [(pts[i].x, pts[i].y) for i in (THUMB_TIP, INDEX_TIP)]
+
+    def _vote(self, label: str | None) -> None:
+        self._votes.append(label)
+        top, count = Counter(self._votes).most_common(1)[0]
+        with self._lock:
+            self._gesture = top if top is not None and count >= VOTES_NEEDED else None
+            self._gesture_time = time.time()
+
+    @property
+    def gesture(self) -> str | None:
+        """Debounced 'palm' / 'fist', or None (no hand, unclear pose, or stale)."""
+        with self._lock:
+            if not self._is_fresh(self._gesture_time):
+                return None
+            return self._gesture
 
     @property
     def hand(self) -> tuple[float, float, bool] | None:

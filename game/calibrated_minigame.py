@@ -14,6 +14,7 @@ class CalibratedMinigame(Minigame):
     calibrate_seconds = 1.2     # time spent sampling
     calibrate_timeout = 5.0     # give up waiting for the player after this long
     after_calibration = "play"  # mode entered once calibration ends
+    distance_tolerance = 0.4    # allowed drift from the calibrated shoulder width
 
     def start(self) -> None:
         super().start()
@@ -35,6 +36,13 @@ class CalibratedMinigame(Minigame):
 
     def calibration_prompt(self) -> str:
         return "Stand still..."
+
+    def distance_ok(self, width: float) -> bool:
+        """Whether a shoulder width is close enough to the calibrated one (neutral)."""
+        if self.neutral is None:
+            return True
+        ratio = width / max(self.neutral, 1e-4)
+        return 1.0 - self.distance_tolerance <= ratio <= 1.0 + self.distance_tolerance
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.KEYDOWN and event.key == pygame.K_c:

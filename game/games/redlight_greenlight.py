@@ -17,7 +17,6 @@ COURSE_PER_SECOND = 4.5
 PUMP_THRESHOLD = 0.9
 DEFAULT_FREEZE_THRESHOLD = 0.38
 CAUGHT_AFTER = 0.18
-DISTANCE_TOLERANCE = 0.38
 KEY_PULSE = 0.2             # keyboard fallback: how long a new arm "runs"
 KEY_MOTION = 0.24           # keyboard fallback: how long a key press counts as movement
 
@@ -33,6 +32,7 @@ class RedLightGreenLight(CalibratedMinigame):
 
     title = "Red Light, Green Light"
     tracker_cls = BodyTracker
+    distance_tolerance = 0.38
 
     def __init__(self, screen: pygame.Surface, tracker: BodyTracker | None = None) -> None:
         super().__init__(screen, tracker)
@@ -103,12 +103,6 @@ class RedLightGreenLight(CalibratedMinigame):
             return "Hold still - calibrating distance and movement"
         return "Show your head, shoulders and upper body"
 
-    def _distance_ok(self, width: float) -> bool:
-        if self.neutral is None:
-            return True
-        ratio = width / max(self.neutral, 1e-4)
-        return 1.0 - DISTANCE_TOLERANCE <= ratio <= 1.0 + DISTANCE_TOLERANCE
-
     # Update state
     def update(self, dt: float) -> None:
         if self.finished:
@@ -129,7 +123,7 @@ class RedLightGreenLight(CalibratedMinigame):
             return
         pump, motion, width, hands_visible = body if camera else (0.0, 0.0, 0.0, False)
 
-        if camera and not self._distance_ok(width):
+        if camera and not self.distance_ok(width):
             self.running_detected = False
             self.status = "Paused - return to your calibrated distance"
             return
