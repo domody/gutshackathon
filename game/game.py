@@ -33,7 +33,6 @@ class Game:
             self.settings.title,
             [
                 MenuItem("Play", self.start_game),
-                MenuItem("Tutorial", self.tutorial),
                 MenuItem("Quit", self.quit),
             ],
         )
@@ -58,9 +57,6 @@ class Game:
             return
         self.minigame.start()
         self.ui.dismiss(self.ui.clear, fade_background=True, backdrop=self.minigame.draw)
-
-    def tutorial(self) -> None:
-        pass
 
     def quit(self) -> None:
         self.running = False
