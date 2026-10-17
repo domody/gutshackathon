@@ -12,7 +12,7 @@ from game.minigame import Action
 from game.tracking import BodyTracker
 from game.ui import draw_bar, draw_camera_preview, draw_status_line, draw_text_centered
 
-MEETING_SECONDS = 45.0
+MEETING_SECONDS = 30.0
 INTRO_SECONDS = 4.2
 FIRST_CLEAR_SECONDS = 6.5
 CLEAR_MIN = 4.0

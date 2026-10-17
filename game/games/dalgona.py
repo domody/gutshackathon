@@ -70,6 +70,10 @@ class Dalgona(Minigame):
         self.name = "WM"
         self.state = "name"
         self.page_index = 0
+        self.signature_index = 0
+        self.completed_signatures: list[
+            tuple[list[tuple[float, float]], list[list[tuple[float, float, bool]]]]
+        ] = []
         self.page_y = -height
         self.slide_time = 0.0
         self.pause_timer = 0.0
@@ -115,6 +119,8 @@ class Dalgona(Minigame):
 
     def _begin_page(self, index: int) -> None:
         self.page_index = index
+        self.signature_index = 0
+        self.completed_signatures = []
         self.state = "sliding"
         self.slide_time = 0.0
         self.page_y = -self.paper_rect.height - 30
@@ -130,24 +136,27 @@ class Dalgona(Minigame):
         self.pinching = False
 
     def _build_signature(self, page_index: int) -> list[tuple[float, float]]:
+        return self._signature_points(self.signature_index)
+
+    def _signature_points(self, signature_index: int) -> list[tuple[float, float]]:
         rect = self.paper_rect
         left = rect.x + int(rect.width * 0.19)
         right = rect.right - int(rect.width * 0.14)
-        center_y = rect.y + int(rect.height * 0.81)
+        center_y = rect.y + int(rect.height * (0.70 if signature_index == 0 else 0.84))
         width = right - left
         points: list[tuple[float, float]] = []
         count = max(80, int(width / SAMPLE_SPACING) * 2)
         for index in range(count):
             t = index / (count - 1)
             x = left + width * t
-            if page_index == 0:
-                wave = math.sin(t * math.pi * 7.5) * (1 - t * 0.5)
-                flourish = math.sin(t * math.pi * 2) * 0.35
-                y = center_y + (wave + flourish) * rect.height * 0.055
+            if signature_index == 0:
+                wave = math.sin(t * math.pi * 6.5) * (1 - t * 0.45)
+                flourish = math.sin(t * math.pi * 2.0) * 0.30
+                y = center_y + (wave + flourish) * rect.height * 0.037
             else:
-                wave = math.sin(t * math.pi * 5.5)
-                underline = math.sin(t * math.pi) * 0.28
-                y = center_y + (wave - underline) * rect.height * 0.05
+                wave = math.sin(t * math.pi * 4.5) * (0.65 + t * 0.35)
+                flourish = math.sin(t * math.pi * 3.0) * 0.22
+                y = center_y + (wave - flourish) * rect.height * 0.038
             points.append((x, y))
         return points
 
@@ -198,9 +207,9 @@ class Dalgona(Minigame):
                 self.state = "signing"
                 self.status = "Pinch and trace inside the signature guide"
             return
-        if self.state in ("name_complete", "page_complete", "retry"):
+        if self.state in ("name_complete", "signature_complete", "page_complete", "retry"):
             self.pause_timer += dt
-            pause = PAGE_PAUSE if self.state in ("name_complete", "page_complete") else RETRY_PAUSE
+            pause = PAGE_PAUSE if self.state in ("name_complete", "signature_complete", "page_complete") else RETRY_PAUSE
             if self.pause_timer < pause:
                 return
             if self.state == "retry":
@@ -214,6 +223,11 @@ class Dalgona(Minigame):
                     self.status = "Try again - keep the pen inside the guide"
             elif self.state == "name_complete":
                 self._begin_page(0)
+            elif self.state == "signature_complete":
+                self.signature_index = 1
+                self._reset_signature()
+                self.state = "signing"
+                self.status = "Now sign the NDA"
             else:
                 self.result = True
                 self.end_timer = 0.0
@@ -230,10 +244,15 @@ class Dalgona(Minigame):
             self.pinching = False
             self.status = "Outside the lines - this copy is void"
         elif self.coverage >= WIN_COVERAGE:
-            self.state = "page_complete"
+            if self.signature_index == 0:
+                self.completed_signatures.append((self.samples.copy(), [stroke.copy() for stroke in self.strokes]))
+                self.state = "signature_complete"
+                self.status = "Internship agreement signed"
+            else:
+                self.state = "page_complete"
+                self.status = "Both documents signed and witnessed"
             self.pause_timer = 0.0
             self.pinching = False
-            self.status = "Signed and witnessed"
 
     def _trace_input(self, position: tuple[float, float], pinch: bool) -> None:
         was_pinching = self.pinching
@@ -387,12 +406,25 @@ class Dalgona(Minigame):
             body = self.body_font.render(line, True, INK)
             screen.blit(body, (rect.x + 48, rect.y + 185 + index * 21))
 
-        signature_y = rect.y + int(rect.height * 0.70)
-        label = self.small_font.render("AUTHORIZED SIGNATURE - TRACE THE GUIDE", True, BLUE)
-        screen.blit(label, (rect.x + 48, signature_y))
-        pygame.draw.line(screen, MUTED, (rect.x + 48, rect.y + int(rect.height * 0.89)), (rect.right - 48, rect.y + int(rect.height * 0.89)), 2)
+        first_label_y = rect.y + int(rect.height * 0.61)
+        second_label_y = rect.y + int(rect.height * 0.75)
+        first_label = self.small_font.render("INTERNSHIP AGREEMENT SIGNATURE", True, BLUE)
+        second_label = self.small_font.render("NDA SIGNATURE", True, BLUE)
+        screen.blit(first_label, (rect.x + 48, first_label_y))
+        screen.blit(second_label, (rect.x + 48, second_label_y))
+        pygame.draw.line(screen, MUTED, (rect.x + 48, rect.y + int(rect.height * 0.735)), (rect.right - 48, rect.y + int(rect.height * 0.735)), 2)
+        pygame.draw.line(screen, MUTED, (rect.x + 48, rect.y + int(rect.height * 0.875)), (rect.right - 48, rect.y + int(rect.height * 0.875)), 2)
 
         if abs(offset) < 1:
+            if self.signature_index == 0:
+                for sample in self._signature_points(1):
+                    pygame.draw.circle(screen, (190, 204, 214), (int(sample[0]), int(sample[1])), 2)
+            for saved_samples, saved_strokes in self.completed_signatures:
+                for sample in saved_samples:
+                    pygame.draw.circle(screen, SIGNED, (int(sample[0]), int(sample[1])), 4)
+                for stroke in saved_strokes:
+                    for first, second in zip(stroke, stroke[1:]):
+                        pygame.draw.line(screen, SIGNED if second[2] else BAD, (first[0], first[1]), (second[0], second[1]), 4)
             for sample, done in zip(self.samples, self.covered):
                 color = SIGNED if done else GUIDE
                 radius = 4 if done else 3
@@ -405,7 +437,10 @@ class Dalgona(Minigame):
         footer = self.small_font.render("Page 2 of 2", True, MUTED)
         screen.blit(footer, footer.get_rect(midbottom=(rect.centerx, rect.bottom - 18)))
 
-        if self.state == "page_complete":
+        if self.state == "signature_complete":
+            signed = self.document_font.render("INTERNSHIP SIGNED", True, GREEN)
+            screen.blit(signed, signed.get_rect(midright=(rect.right - 48, first_label_y + 8)))
+        elif self.state == "page_complete":
             stamp = self.heading_font.render("SIGNED", True, GREEN)
             stamp_rect = stamp.get_rect(center=(rect.right - 120, rect.y + 118)).inflate(20, 10)
             pygame.draw.rect(screen, GREEN, stamp_rect, width=5, border_radius=5)

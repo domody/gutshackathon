@@ -36,7 +36,6 @@ class Game:
             self.settings.title,
             [
                 MenuItem("Play", self.start_game),
-                MenuItem("Quit", self.quit),
             ],
         )
 
@@ -52,6 +51,8 @@ class Game:
             self.minigame.close()
         if not self.remaining:
             self.minigame = None
+            self.navigation_tracker.start()
+            self.pinch_was_down = False
             self.ui.show(self.menu)
             return
         cls = self.remaining.pop(0)
@@ -93,6 +94,8 @@ class Game:
 
     def run(self) -> None:
         self.running = True
+        self.navigation_tracker.start()
+        self.pinch_was_down = False
         self.ui.show(self.menu)
         while self.running:
             dt = self.clock.tick(self.settings.fps) / 1000

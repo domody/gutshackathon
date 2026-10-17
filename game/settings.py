@@ -5,7 +5,7 @@ from dataclasses import dataclass
 class Settings:
     """Game-wide configuration."""
 
-    title: str = "Guts Hackathon"
+    title: str = "My First Day at JPMorganChase"
     window_size: tuple[int, int] = (800, 600)
     fullscreen: bool = True
     fps: int = 60
