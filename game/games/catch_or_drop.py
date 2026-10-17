@@ -14,18 +14,21 @@ TARGET_OBJECTS = 10
 LIVES = 3
 FALL_TIME = (1.65, 1.1)        # seconds from spawn to your hand, start -> end of round
 SPAWN_INTERVAL = (1.5, 0.9)    # seconds between objects, start -> end of round
-BOMB_CHANCE = 0.4              # after the first two objects; never more than 2 in a row
+BAD_CHANCE = 0.4               # after the first two objects; never more than 2 in a row
 PALM_HOLD = 0.05               # palm must be shown this long inside the zone to catch
-FIST_HOLD = 0.05               # fist must be shown this long inside the zone to drop a bomb
+FIST_HOLD = 0.05               # fist must be shown this long inside the zone to drop a bad item
 READY_SECONDS = 3.5
 SIM_SECONDS = 0.5              # keyboard fallback: how long a key press "holds" a pose
 FLASH_SECONDS = 0.7
-OBJ_R = 30
+OBJ_R = 34
 
-GOOD_KINDS = ("egg", "gem", "orange")
+GOOD_KINDS = ("contract", "document", "program")
+BAD_KINDS = ("p45", "fired")
 KIND_COLORS = {
-    "egg": (245, 235, 200), "gem": (90, 170, 255), "orange": (255, 160, 50), "bomb": (255, 140, 40),
+    "contract": (245, 235, 200), "document": (170, 210, 255), "program": (90, 220, 140),
+    "p45": (240, 210, 90), "fired": (235, 70, 70),
 }
+GOOD_FLASH = {"contract": "SIGNED OFF!", "document": "FILED!", "program": "DEPLOYED!"}
 
 BG = (16, 18, 32)
 FLOOR = (30, 32, 50)
@@ -34,6 +37,8 @@ BAD_COLOR = (235, 70, 70)
 PALM_COLOR = (125, 195, 255)
 FIST_COLOR = (255, 170, 90)
 DARK = (25, 25, 35)
+PAPER = (248, 246, 238)
+INK = (90, 95, 120)
 
 
 @dataclass
@@ -55,22 +60,23 @@ def lerp(pair: tuple[float, float], t: float) -> float:
 
 
 class CatchOrDrop(Minigame):
-    """Palm to catch, fist to let bombs smash. Don't lose all your lives."""
+    """Palm to catch the good paperwork, fist to let the P45s fall. Don't get sacked."""
 
-    title = "Catch or Drop"
+    title = "Don't Get Fired"
     tracker_cls = HandTracker
 
     def __init__(self, screen: pygame.Surface, tracker: HandTracker | None = None) -> None:
         super().__init__(screen, tracker)
+        self.tiny_font = pygame.font.Font(None, 18)
         self._overlay: pygame.Surface | None = None
         self.start()
 
     @property
     def actions(self) -> tuple[Action, Action]:
         return (
-            Action("Open Palm", "Show an open palm to catch a falling object (or O / Up)",
+            Action("Open Palm", "Show an open palm to catch good paperwork (or O / Up)",
                    self.open_palm),
-            Action("Fist", "Make a fist to let a bomb smash (or F / Down)", self.make_fist),
+            Action("Fist", "Make a fist to let a P45 fall (or F / Down)", self.make_fist),
         )
 
     def start(self) -> None:
@@ -80,7 +86,7 @@ class CatchOrDrop(Minigame):
         self.lives = LIVES
         self.spawned = 0
         self.resolved = 0
-        self.bomb_run = 0
+        self.bad_run = 0
         self.spawn_timer = 99.0     # spawn the first object as soon as play starts
         self.items: list[Item] = []
         self.particles: list[list] = []
@@ -158,12 +164,12 @@ class CatchOrDrop(Minigame):
         self.spawn_timer = 0.0
 
         w, hand_y, _, _, _ = self._geom()
-        bomb = self.spawned >= 2 and self.bomb_run < 2 and random.random() < BOMB_CHANCE
-        self.bomb_run = self.bomb_run + 1 if bomb else 0
-        kind = "bomb" if bomb else random.choice(GOOD_KINDS)
+        bad = self.spawned >= 2 and self.bad_run < 2 and random.random() < BAD_CHANCE
+        self.bad_run = self.bad_run + 1 if bad else 0
+        kind = random.choice(BAD_KINDS if bad else GOOD_KINDS)
         spawn_y = -OBJ_R - 10
         vy = (hand_y - spawn_y) / lerp(FALL_TIME, progress)
-        self.items.append(Item(kind, not bomb, w / 2 + random.uniform(-70, 70), spawn_y, vy))
+        self.items.append(Item(kind, not bad, w / 2 + random.uniform(-70, 70), spawn_y, vy))
         self.spawned += 1
 
     def _update_items(self, dt: float) -> None:
@@ -200,14 +206,14 @@ class CatchOrDrop(Minigame):
             it.state, it.fade = "caught", 0.3
             it.x, it.y = w / 2, hand_y - 30
             if it.good:
-                self._success("CAUGHT!")
+                self._success(GOOD_FLASH[it.kind])
             else:
-                self._burst(it.x, it.y, KIND_COLORS["bomb"], 28, 380)
-                self._failure("IT'S A BOMB!")
+                self._burst(it.x, it.y, KIND_COLORS[it.kind], 28, 380)
+                self._failure("YOU'RE FIRED!" if it.kind == "fired" else "P45 ACCEPTED!")
         elif it.good:
-            self._failure("SMASHED!")
+            self._failure("PAPERWORK LOST!")
         elif it.fist_t >= FIST_HOLD:
-            self._success("NICE DROP!")
+            self._success("DODGED THE SACK!")
         else:
             self._failure("SHOW A FIST!")
 
@@ -263,38 +269,73 @@ class CatchOrDrop(Minigame):
 
         if self.mode == "ready":
             draw_text_centered(screen, self.big_font, "OPEN PALM = CATCH", GOOD_COLOR, (w // 2, 150))
-            draw_text_centered(screen, self.big_font, "FIST = LET BOMBS SMASH", BAD_COLOR, (w // 2, 215))
+            draw_text_centered(screen, self.big_font, "FIST = LET P45s FALL", BAD_COLOR, (w // 2, 215))
             draw_text_centered(screen, self.font, "Get ready...", (230, 230, 230), (w // 2, 270))
         elif self.flash_t > 0:
             draw_text_centered(screen, self.big_font, self.flash_text, self.flash_color, (w // 2, 110))
 
+    def _paper(self, screen: pygame.Surface, x: int, y: int, w: int, h: int,
+               fill=PAPER, border=DARK) -> pygame.Rect:
+        rect = pygame.Rect(x - w // 2, y - h // 2, w, h)
+        pygame.draw.rect(screen, fill, rect, border_radius=3)
+        pygame.draw.rect(screen, border, rect, 3, border_radius=3)
+        return rect
+
+    def _text_lines(self, screen: pygame.Surface, rect: pygame.Rect, top: int, count: int,
+                    color=INK, gap: int = 8, pad: int = 9) -> None:
+        for i in range(count):
+            end = rect.right - pad - (10 if i == count - 1 else 0)
+            yy = rect.top + top + i * gap
+            pygame.draw.line(screen, color, (rect.left + pad, yy), (end, yy), 2)
+
+    def _draw_contract(self, screen: pygame.Surface, x: int, y: int) -> None:
+        r = self._paper(screen, x, y, 52, 68)
+        pygame.draw.rect(screen, INK, (r.left + 9, r.top + 8, r.w - 18, 4))
+        self._text_lines(screen, r, 20, 4)
+        sig = [(r.left + 9, r.bottom - 12), (r.left + 15, r.bottom - 20), (r.left + 20, r.bottom - 10),
+               (r.left + 26, r.bottom - 19), (r.left + 32, r.bottom - 12)]
+        pygame.draw.lines(screen, (40, 80, 200), False, sig, 2)
+        pygame.draw.circle(screen, BAD_COLOR, (r.right - 12, r.bottom - 14), 7)
+        pygame.draw.circle(screen, (150, 30, 30), (r.right - 12, r.bottom - 14), 7, 2)
+
+    def _draw_document(self, screen: pygame.Surface, x: int, y: int) -> None:
+        r = self._paper(screen, x, y, 52, 68, fill=(232, 240, 255))
+        fold = [(r.right - 14, r.top), (r.right, r.top + 14), (r.right - 14, r.top + 14)]
+        pygame.draw.polygon(screen, (170, 190, 230), fold)
+        pygame.draw.polygon(screen, DARK, fold, 2)
+        self._text_lines(screen, r, 20, 5, color=(110, 130, 170))
+
+    def _draw_program(self, screen: pygame.Surface, x: int, y: int) -> None:
+        r = pygame.Rect(x - 34, y - 28, 68, 56)
+        pygame.draw.rect(screen, (28, 32, 46), r, border_radius=5)
+        bar = pygame.Rect(r.left, r.top, r.w, 13)
+        pygame.draw.rect(screen, (70, 80, 115), bar, border_top_left_radius=5, border_top_right_radius=5)
+        for i, c in enumerate(((255, 95, 90), (255, 190, 60), (60, 200, 90))):
+            pygame.draw.circle(screen, c, (r.left + 8 + i * 9, r.top + 6), 3)
+        for i, (indent, length) in enumerate(((0, 30), (8, 38), (8, 24), (0, 18))):
+            yy = r.top + 22 + i * 8
+            pygame.draw.line(screen, (90, 230, 140), (r.left + 7 + indent, yy), (r.left + 7 + indent + length, yy), 2)
+        pygame.draw.rect(screen, DARK, r, 3, border_radius=5)
+
+    def _draw_p45(self, screen: pygame.Surface, x: int, y: int) -> None:
+        r = self._paper(screen, x, y, 52, 68, fill=(250, 240, 200))
+        pygame.draw.rect(screen, (200, 60, 60), (r.left + 3, r.top + 3, r.w - 6, 18))
+        draw_text_centered(screen, self.small_font, "P45", (255, 255, 255), (r.centerx, r.top + 12))
+        self._text_lines(screen, r, 30, 4, color=(140, 120, 70))
+
+    def _draw_fired(self, screen: pygame.Surface, x: int, y: int) -> None:
+        r = self._paper(screen, x, y, 58, 68, fill=(255, 235, 235), border=(160, 30, 30))
+        draw_text_centered(screen, self.tiny_font, "YOU'RE", (190, 30, 30), (r.centerx, r.top + 17))
+        draw_text_centered(screen, self.small_font, "FIRED!", (190, 30, 30), (r.centerx, r.top + 33))
+        self._text_lines(screen, r, 48, 3, color=(190, 120, 120))
+
     def _draw_item(self, screen: pygame.Surface, it: Item) -> None:
         x, y = int(it.x), int(it.y)
-        color = KIND_COLORS[it.kind]
-        if it.kind == "egg":
-            pygame.draw.ellipse(screen, color, (x - 20, y - 27, 40, 54))
-            pygame.draw.ellipse(screen, DARK, (x - 20, y - 27, 40, 54), 3)
-            pygame.draw.circle(screen, (255, 255, 255), (x - 7, y - 10), 5)
-        elif it.kind == "gem":
-            pts = [(x, y - 30), (x + 26, y - 4), (x, y + 30), (x - 26, y - 4)]
-            pygame.draw.polygon(screen, color, pts)
-            pygame.draw.polygon(screen, DARK, pts, 3)
-            pygame.draw.line(screen, (210, 235, 255), (x - 26, y - 4), (x + 26, y - 4), 2)
-        elif it.kind == "orange":
-            pygame.draw.circle(screen, color, (x, y), OBJ_R)
-            pygame.draw.circle(screen, DARK, (x, y), OBJ_R, 3)
-            pygame.draw.ellipse(screen, (110, 200, 90), (x + 2, y - OBJ_R - 8, 16, 9))
-        else:  # bomb
-            pygame.draw.circle(screen, (45, 45, 58), (x, y), OBJ_R)
-            pygame.draw.circle(screen, (10, 10, 14), (x, y), OBJ_R, 3)
-            pygame.draw.circle(screen, (200, 200, 215), (x - 9, y - 9), 5)
-            pygame.draw.line(screen, (190, 160, 110), (x + 10, y - 24), (x + 22, y - 38), 4)
-            spark = (255, 220, 90) if int(it.y / 12) % 2 else (255, 130, 40)
-            pygame.draw.circle(screen, spark, (x + 24, y - 40), 6)
+        getattr(self, f"_draw_{it.kind}")(screen, x, y)
 
         ring = GOOD_COLOR if it.good else BAD_COLOR
-        pygame.draw.circle(screen, ring, (x, y), OBJ_R + 10, 3)
-        draw_text_centered(screen, self.small_font, "CATCH" if it.good else "DROP", ring, (x, y - OBJ_R - 28))
+        pygame.draw.circle(screen, ring, (x, y), OBJ_R + 14, 3)
+        draw_text_centered(screen, self.small_font, "CATCH" if it.good else "DROP", ring, (x, y - OBJ_R - 32))
 
     def _draw_hand(self, screen: pygame.Surface, cx: int, cy: int) -> None:
         if self.hand == "palm":

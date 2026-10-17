@@ -2,10 +2,11 @@ from collections.abc import Sequence
 
 import pygame
 
-from game.menu.item import MenuItem
+from game.ui.screen import Screen
+from game.ui.screens.item import MenuItem
 
 
-class Menu:
+class Menu(Screen):
     """Vertical menu: handles input, selection, and rendering."""
 
     TITLE_SIZE = 96
