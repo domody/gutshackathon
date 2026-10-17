@@ -5,7 +5,7 @@ from game.minigame import Minigame
 from game.scenes import SCENES
 from game.settings import Settings
 from game.tracking import HandTracker
-from game.ui import ScreenManager
+from game.ui import ScreenManager, draw_score
 from game.ui.screens import FailScreen, FiredScreen, Menu, MenuItem, MinigameIntro, PassScreen, SceneScreen
 
 
