@@ -22,11 +22,15 @@ class Game:
             self.settings.title,
             [
                 MenuItem("Play", self.start_game),
+                MenuItem("Tutorial", self.tutorial),
                 MenuItem("Quit", self.quit),
             ],
         )
 
     def start_game(self) -> None:
+        pass
+
+    def tutorial(self) -> None:
         pass
 
     def quit(self) -> None:
