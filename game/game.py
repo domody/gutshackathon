@@ -2,7 +2,7 @@ import random
 
 import pygame
 
-from game.games import CatchOrDrop, Dalgona, RedLightGreenLight, SpotlightDodge, TugOfWar, simonsays
+from game.games import CatchOrDrop, CoffeeRun, Dalgona, RedLightGreenLight, SpotlightDodge, TugOfWar, simonsays
 from game.minigame import Minigame
 from game.settings import Settings
 from game.ui import ScreenManager
@@ -24,7 +24,7 @@ class Game:
         self.clock = pygame.time.Clock()
         self.running = False
         self.minigames: list[type[Minigame]] = [
-            Dalgona, RedLightGreenLight, simonsays, SpotlightDodge, CatchOrDrop, TugOfWar,
+            Dalgona, RedLightGreenLight, simonsays, SpotlightDodge, CatchOrDrop, TugOfWar, CoffeeRun,
         ]
         self.remaining: list[type[Minigame]] = []
         self.minigame: Minigame | None = None
