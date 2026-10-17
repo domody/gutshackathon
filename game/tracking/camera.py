@@ -13,7 +13,7 @@ import pygame
 try:
     import mediapipe as mp
     MP_ERROR = None
-except Exception as exc:  # keep the real reason so it can be reported
+except Exception as exc:  # Preserve the import error so it can be reported.
     mp = None
     MP_ERROR = repr(exc)
 
@@ -34,10 +34,10 @@ class CameraTracker(ABC):
     """Reads the webcam on a worker thread. Subclasses set up a backend and measure frames."""
 
     label = "Tracking"
-    stale_seconds = 0.5      # no detection for this long -> reading becomes None
-    smoothing = 0.5          # 0..1, higher = snappier
+    stale_seconds = 0.5  # Treat readings older than this as unavailable.
+    smoothing = 0.5  # Blend factor from 0 (steady) to 1 (immediate response).
     preview_size = (160, 120)
-    max_fps: float | None = None   # cap the capture loop (None = as fast as frames arrive)
+    max_fps: float | None = None  # Optional capture limit; None uses the camera's full frame rate.
 
     def __init__(self, camera_index: int = 0) -> None:
         self.camera_index = camera_index
@@ -50,11 +50,11 @@ class CameraTracker(ABC):
         self._lock = threading.Lock()
         self._preview: bytes | None = None
 
-    # Start and stop the camera thread
+    # Manage camera and worker-thread lifetime.
     def start(self) -> None:
         if self._running:
             return
-        # Open the camera on the calling (main) thread: macOS wants that.
+        # Open the camera on the main thread because macOS requires it.
         cap = cv2.VideoCapture(self.camera_index)
         if not cap.isOpened():
             cap.release()
@@ -84,7 +84,7 @@ class CameraTracker(ABC):
             self._cap = None
         self._teardown()
 
-    # Subclass hooks
+    # Methods subclasses use to configure detection.
     @abstractmethod
     def _setup(self) -> bool:
         """Create the detector and set self.backend. Return False if unavailable."""
@@ -99,7 +99,7 @@ class CameraTracker(ABC):
     def _process(self, frame_bgr) -> list[tuple[float, float]]:
         """Measure one mirrored frame, store results under self._lock, return preview marks."""
 
-    # Capture loop
+    # Read, process and preview camera frames.
     def _loop(self) -> None:
         pw, ph = self.preview_size
         while self._running:
@@ -108,7 +108,7 @@ class CameraTracker(ABC):
             if not ok:
                 time.sleep(0.01)
                 continue
-            frame = cv2.flip(frame, 1)  # mirror so it feels like a mirror
+            frame = cv2.flip(frame, 1)  # Mirror the preview so movement feels natural.
             try:
                 marks = self._process(frame)
             except Exception as exc:
@@ -131,7 +131,7 @@ class CameraTracker(ABC):
     def _blend(self, old: float, new: float, fresh: bool) -> float:
         return old + (new - old) * self.smoothing if fresh else new
 
-    # Read tracked values
+    # Expose camera and preview status.
     @property
     def available(self) -> bool:
         return self._running and self.backend is not None

@@ -13,7 +13,7 @@ class ScreenManager:
     def __init__(self) -> None:
         self.current: Screen | None = None
         self._backdrop: Backdrop | None = None
-        self._state = "idle"  # "in", "idle" or "out"
+        self._state = "idle"  # Current transition: "in", "idle" or "out".
         self._t = 0.0
         self._after: Callable[[], None] | None = None
         self._fade_bg = False
@@ -70,7 +70,7 @@ class ScreenManager:
             self._t += dt
             if self._t >= self.current.fade_in:
                 self._state = "idle"
-                self._backdrop = None  # background is opaque now; stop drawing what's beneath
+                self._backdrop = None  # The screen is opaque now, so the old backdrop is no longer needed.
         elif self._state == "out":
             self._t += dt
             if self._t >= self.current.fade_out:

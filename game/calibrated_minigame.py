@@ -11,10 +11,10 @@ DONE_COLOR = (110, 210, 130)
 class CalibratedMinigame(Minigame):
     """Minigame that samples the player for a moment before it starts to set a neutral."""
 
-    calibrate_seconds = 1.2     # time spent sampling
-    calibrate_timeout = 5.0     # give up waiting for the player after this long
-    after_calibration = "play"  # mode entered once calibration ends
-    distance_tolerance = 0.4    # allowed drift from the calibrated shoulder width
+    calibrate_seconds = 1.2     # Seconds of valid samples required for calibration.
+    calibrate_timeout = 5.0     # Maximum seconds to wait for calibration samples.
+    after_calibration = "play"  # Mode to enter after calibration completes.
+    distance_tolerance = 0.4    # Allowed shoulder-width change from the calibrated distance.
 
     def start(self) -> None:
         super().start()

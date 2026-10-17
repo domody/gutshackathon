@@ -33,7 +33,7 @@ class FaceMinigame(CalibratedMinigame):
         self.face_visible = sample is not None
         if sample is None:
             return None
-        if self.neutral is None:   # camera found us late: calibrate on first sight
+        if self.neutral is None:  # Use the first visible face pose if calibration saw no face.
             self.neutral = sample
         return ((sample[0] - self.neutral[0]) / self.tracker.scale,
                 sample[1] - self.neutral[1])
