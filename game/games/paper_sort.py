@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 import random
 
+import numpy as np
 import pygame
 
 from game.minigame import Action, Minigame
@@ -26,6 +28,29 @@ WOOD_LIGHT = (193, 139, 87)
 GREEN = (57, 164, 102)
 RED = (207, 66, 62)
 WHITE = (250, 250, 247)
+ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+
+
+def _load_documents() -> dict[str, pygame.Surface]:
+    image = pygame.image.load(os.path.join(ASSET_DIR, "paper_sort_documents.png")).convert_alpha()
+    rgb = pygame.surfarray.array3d(image)
+    alpha = pygame.surfarray.pixels_alpha(image)
+    red = rgb[:, :, 0].astype(np.int16)
+    green = rgb[:, :, 1].astype(np.int16)
+    blue = rgb[:, :, 2].astype(np.int16)
+    pink = ((red > 80) & (blue > 80) & (green < np.minimum(red, blue) * 0.70)
+            & (np.abs(red - blue) < 100))
+    alpha[pink] = 0
+    del alpha
+    half = image.get_width() // 2
+    expense_half = image.subsurface((0, 0, half, image.get_height())).copy()
+    contract_half = image.subsurface((half, 0, image.get_width() - half, image.get_height())).copy()
+    expense_bounds = expense_half.get_bounding_rect(min_alpha=8)
+    contract_bounds = contract_half.get_bounding_rect(min_alpha=8)
+    return {
+        "EXPENSE": expense_half.subsurface(expense_bounds).copy(),
+        "CONTRACT": contract_half.subsurface(contract_bounds).copy(),
+    }
 
 
 class PaperSort(Minigame):
@@ -37,13 +62,18 @@ class PaperSort(Minigame):
         self.title_font = pygame.font.Font(None, 58)
         self.file_font = pygame.font.Font(None, 42)
         self.label_font = pygame.font.Font(None, 29)
+        self.desk_source = pygame.image.load(os.path.join(ASSET_DIR, "paper_sort_desk.png")).convert()
+        self.document_sources = _load_documents()
+        self._art_size: tuple[int, int] | None = None
+        self.desk_art: pygame.Surface | None = None
+        self.document_art: dict[str, pygame.Surface] = {}
         self.start()
 
     @property
     def actions(self) -> tuple[Action, Action]:
         return (
-            Action("Swipe Left", "Send contracts to the CONTRACTS pile"),
-            Action("Swipe Right", "Send expenses to the EXPENSES pile"),
+            Action("Swipe Left", "Send expenses to the blue EXPENSES tray"),
+            Action("Swipe Right", "Send contracts to the red CONTRACTS tray"),
         )
 
     @property
@@ -64,6 +94,8 @@ class PaperSort(Minigame):
         self.last_x: float | None = None
         self.card_x = 0.5
         self.card_target = 0.5
+        self.card_y = 0.48
+        self.card_target_y = 0.48
         self.flash = 0.0
         self.transition_t = 0.0
         self.message = "Bring your hand to the middle"
@@ -75,6 +107,7 @@ class PaperSort(Minigame):
         dt = min(dt, 0.1)
         self.flash = max(0.0, self.flash - dt)
         self.card_x += (self.card_target - self.card_x) * min(1.0, dt * 13.0)
+        self.card_y += (self.card_target_y - self.card_y) * min(1.0, dt * 11.0)
 
         if self.result is not None:
             self.result_t += dt
@@ -93,6 +126,8 @@ class PaperSort(Minigame):
                 else:
                     self.card_x = 0.5
                     self.card_target = 0.5
+                    self.card_y = 0.48
+                    self.card_target_y = 0.48
             return
 
         hand = self.tracker.hand if self.tracker.available else None
@@ -130,8 +165,9 @@ class PaperSort(Minigame):
     def _sort(self, direction: int) -> None:
         if self.result is not None or self.index >= len(self.files):
             return
-        expected = -1 if self.files[self.index] == "CONTRACT" else 1
-        self.card_target = -0.35 if direction < 0 else 1.35
+        expected = -1 if self.files[self.index] == "EXPENSE" else 1
+        self.card_target = 0.20 if direction < 0 else 0.80
+        self.card_target_y = 0.54
         self.flash = 0.55
         self.transition_t = 0.38
         if direction == expected:
@@ -149,28 +185,37 @@ class PaperSort(Minigame):
 
     def draw(self, screen: pygame.Surface) -> None:
         width, height = screen.get_size()
-        screen.fill(NAVY)
-        pygame.draw.rect(screen, WOOD, (0, int(height * 0.31), width, int(height * 0.69)))
-        for y in range(int(height * 0.35), height, 60):
-            pygame.draw.line(screen, WOOD_LIGHT, (0, y), (width, y + 12), 2)
-
-        draw_text_centered(screen, self.title_font, "SORT THESE FOR ME", WHITE, (width // 2, 48))
+        self._prepare_art(width, height)
+        screen.blit(self.desk_art, (0, 0))
+        top = pygame.Surface((width, 74), pygame.SRCALPHA)
+        top.fill((7, 32, 58, 222))
+        screen.blit(top, (0, 0))
+        title = self.font.render("A QUICK FAVOUR", True, WHITE)
+        screen.blit(title, (18, 13))
         remaining = max(0, int(ROUND_SECONDS - self.elapsed + 0.999))
-        draw_text_centered(screen, self.small_font, f"{remaining}s   •   {self.index}/{TOTAL_FILES} FILED", PALE,
-                           (width // 2, 86))
-
-        self._draw_pile(screen, int(width * 0.18), int(height * 0.72), "CONTRACTS", -1)
-        self._draw_pile(screen, int(width * 0.82), int(height * 0.72), "EXPENSES", 1)
+        timer = self.font.render(f"{remaining}s", True, WHITE)
+        screen.blit(timer, timer.get_rect(topright=(width - 18, 13)))
+        draw_text_centered(screen, self.small_font, f"{self.index}/{TOTAL_FILES} FILED", PALE,
+                           (width // 2, 22))
+        draw_bar(screen, (width // 2 - 145, 46, 290, 11), self.index / TOTAL_FILES, GREEN,
+                 back=(54, 78, 99), radius=5)
 
         if self.index < len(self.files) and self.result is None:
-            self._draw_file(screen, int(self.card_x * width), int(height * 0.50), self.files[self.index])
+            progress = 0.0 if self.transition_t <= 0.0 else 1.0 - self.transition_t / 0.38
+            self._draw_file(screen, int(self.card_x * width), int(self.card_y * height),
+                            self.files[self.index], 1.0 - progress * 0.42)
 
-        draw_bar(screen, (width // 2 - 145, 106, 290, 13), self.index / TOTAL_FILES, GREEN,
-                 back=(54, 78, 99), radius=6)
         color = RED if self.message in ("Wrong pile", "These are all in the wrong folders") else WHITE
-        draw_text_centered(screen, self.font, self.message, color, (width // 2, 151))
-        draw_text_centered(screen, self.small_font, f"MISTAKES  {self.mistakes}/{MAX_MISTAKES}", WHITE,
-                           (width // 2, height - 32))
+        message = self.font.render(self.message, True, color)
+        message_box = message.get_rect(midbottom=(width // 2, height - 42)).inflate(24, 10)
+        pygame.draw.rect(screen, (7, 32, 58), message_box, border_radius=9)
+        screen.blit(message, message.get_rect(center=message_box.center))
+        mistakes = self.small_font.render(f"MISTAKES {self.mistakes}/{MAX_MISTAKES}", True, WHITE)
+        screen.blit(mistakes, mistakes.get_rect(bottomright=(width - 14, height - 12)))
+        left_count = sum(kind == "EXPENSE" for kind in self.files[:self.index])
+        right_count = sum(kind == "CONTRACT" for kind in self.files[:self.index])
+        self._draw_count(screen, int(width * 0.20), int(height * 0.39), left_count)
+        self._draw_count(screen, int(width * 0.80), int(height * 0.39), right_count)
         draw_camera_preview(screen, self.tracker)
         info = "Hand tracking on" if self.tracker.available else "No camera - A/left or D/right to test"
         draw_status_line(screen, self.small_font, info, WHITE)
@@ -184,26 +229,29 @@ class PaperSort(Minigame):
                                (width // 2, height // 2 - 25))
             draw_text_centered(screen, self.font, self.message, WHITE, (width // 2, height // 2 + 28))
 
-    def _draw_pile(self, screen: pygame.Surface, x: int, y: int, label: str, direction: int) -> None:
-        for offset in range(4):
-            paper = pygame.Rect(0, 0, 190, 116)
-            paper.center = (x + direction * offset * 4, y - offset * 5)
-            pygame.draw.rect(screen, PAPER, paper, border_radius=5)
-            pygame.draw.rect(screen, INK, paper, 2, border_radius=5)
-        text = self.label_font.render(label, True, INK)
-        screen.blit(text, text.get_rect(center=(x, y - 10)))
-        arrow = "< SWIPE LEFT" if direction < 0 else "SWIPE RIGHT >"
-        draw_text_centered(screen, self.small_font, arrow, WHITE, (x, y + 88))
+    def _prepare_art(self, width: int, height: int) -> None:
+        if self._art_size == (width, height):
+            return
+        self._art_size = (width, height)
+        self.desk_art = pygame.transform.smoothscale(self.desk_source, (width, height))
+        target_h = int(height * 0.39)
+        self.document_art = {}
+        for kind, source in self.document_sources.items():
+            target_w = round(source.get_width() * target_h / source.get_height())
+            self.document_art[kind] = pygame.transform.smoothscale(source, (target_w, target_h))
 
-    def _draw_file(self, screen: pygame.Surface, x: int, y: int, kind: str) -> None:
-        card = pygame.Rect(0, 0, 270, 190)
-        card.center = (x, y)
-        pygame.draw.rect(screen, (45, 31, 24), card.move(9, 10), border_radius=8)
-        pygame.draw.rect(screen, PAPER, card, border_radius=8)
-        pygame.draw.rect(screen, INK, card, 3, border_radius=8)
-        screen.blit(self.small_font.render("JPMORGANCHASE", True, BLUE), (card.x + 20, card.y + 17))
-        label = self.file_font.render(kind, True, INK)
-        screen.blit(label, label.get_rect(center=(card.centerx, card.centery - 5)))
-        for offset in range(3):
-            pygame.draw.line(screen, (166, 171, 172), (card.x + 28, card.y + 130 + offset * 14),
-                             (card.right - 28, card.y + 130 + offset * 14), 2)
+    def _draw_count(self, screen: pygame.Surface, x: int, y: int, count: int) -> None:
+        text = self.font.render(str(count), True, WHITE)
+        box = text.get_rect(center=(x, y)).inflate(22, 12)
+        pygame.draw.rect(screen, (7, 32, 58), box, border_radius=12)
+        screen.blit(text, text.get_rect(center=box.center))
+
+    def _draw_file(self, screen: pygame.Surface, x: int, y: int, kind: str, scale: float) -> None:
+        source = self.document_art[kind]
+        if scale < 0.99:
+            source = pygame.transform.smoothscale(
+                source, (max(1, round(source.get_width() * scale)), max(1, round(source.get_height() * scale))))
+        shadow = pygame.Surface(source.get_size(), pygame.SRCALPHA)
+        pygame.draw.rect(shadow, (28, 20, 14, 90), shadow.get_rect(), border_radius=8)
+        screen.blit(shadow, shadow.get_rect(center=(x + 8, y + 10)))
+        screen.blit(source, source.get_rect(center=(x, y)))

@@ -25,10 +25,10 @@ BEFORE_SCENES: dict[type[Minigame], tuple[Scene, ...]] = {
         Scene("boss_looking", "The manager is looking for volunteers. Reach your office before he reaches you."),
     ),
     PaperSort: (
-        Scene("papers_unsorted", "Perfect, thank you for volunteering! Contracts left, expenses right.", "Manager"),
+        Scene("papers_unsorted", "Perfect, thank you for volunteering! Expenses left, contracts right.", "Manager"),
     ),
     CatchOrDrop: (
-        Scene("desk", "Back at your desk, the paperwork starts arriving faster than expected."),
+        Scene("desk", "Back at your desk, the merge requests are already piling up."),
     ),
     CoffeeRun: (
         Scene("boss_coffee", "Before you go, could you grab me some coffee?", "Boss"),

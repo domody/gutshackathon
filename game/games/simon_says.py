@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 import random
 
 import pygame
@@ -39,6 +40,7 @@ SPEECH = {
               "Could we take this offline?", "You're still on mute."),
 }
 NAMES = {"left": "MAYA", "forward": "PRESENTER", "right": "JAMIE"}
+ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 
 def classify_direction(yaw_off: float) -> str:
@@ -59,6 +61,24 @@ class simonsays(FaceMinigame):
         self.fast = fast
         self.opposite = opposite
         self.combo = combo
+        self.room_source = pygame.image.load(os.path.join(ASSET_DIR, "meeting_room.png")).convert()
+        self.people_source = {
+            "left": {
+                False: pygame.image.load(os.path.join(ASSET_DIR, "meeting_left_idle.png")).convert_alpha(),
+                True: pygame.image.load(os.path.join(ASSET_DIR, "meeting_left_speaking.png")).convert_alpha(),
+            },
+            "forward": {
+                False: pygame.image.load(os.path.join(ASSET_DIR, "meeting_center_idle.png")).convert_alpha(),
+                True: pygame.image.load(os.path.join(ASSET_DIR, "meeting_center_speaking.png")).convert_alpha(),
+            },
+            "right": {
+                False: pygame.image.load(os.path.join(ASSET_DIR, "meeting_right_idle.png")).convert_alpha(),
+                True: pygame.image.load(os.path.join(ASSET_DIR, "meeting_right_speaking.png")).convert_alpha(),
+            },
+        }
+        self._art_size: tuple[int, int] | None = None
+        self.room_art: pygame.Surface | None = None
+        self.people_art: dict[str, dict[bool, pygame.Surface]] = {}
         self.start()
 
     @property
@@ -139,49 +159,46 @@ class simonsays(FaceMinigame):
             self.finish(False)
 
     def _draw_room(self, screen: pygame.Surface, w: int, h: int) -> None:
-        screen.fill(WALL)
-        pygame.draw.rect(screen, NAVY, (0, 0, w, 72))
-        pygame.draw.rect(screen, (205, 207, 201), (0, 72, w, 315))
-        pygame.draw.rect(screen, FLOOR, (0, 387, w, h - 387))
-        pygame.draw.line(screen, (155, 137, 121), (0, 387), (w, 387), 4)
-        pygame.draw.rect(screen, (238, 239, 235), (310, 92, 180, 108), border_radius=5)
-        pygame.draw.rect(screen, CHASE_BLUE, (320, 102, 160, 88), border_radius=3)
-        pygame.draw.lines(screen, WHITE, False, [(342, 162), (376, 132), (410, 153), (454, 116)], 5)
-        pygame.draw.ellipse(screen, BROWN, (65, 414, w - 130, 176))
-        pygame.draw.ellipse(screen, WOOD, (65, 396, w - 130, 160))
-        pygame.draw.ellipse(screen, (159, 113, 76), (86, 415, w - 172, 116), 3)
-        pygame.draw.rect(screen, (235, 237, 232), (325, 435, 150, 76), border_radius=5)
-        for y in range(449, 499, 12):
-            pygame.draw.line(screen, (174, 179, 181), (340, y), (460, y), 2)
+        self._prepare_art(w, h)
+        screen.blit(self.room_art, (0, 0))
+        tint = pygame.Surface((w, h), pygame.SRCALPHA)
+        tint.fill((7, 34, 66, 18))
+        screen.blit(tint, (0, 0))
 
-    def _draw_person(self, screen: pygame.Surface, x: int, base_y: int, active: bool,
-                     phase: float, jacket: tuple[int, int, int], name: str) -> None:
-        bounce = int(math.sin(phase * 10.0) * 3) if active else int(math.sin(phase * 2.0 + x))
-        y = base_y + bounce
-        pygame.draw.ellipse(screen, (53, 56, 63), (x - 46, y + 76, 92, 23))
-        pygame.draw.rect(screen, jacket, (x - 43, y + 28, 86, 74), border_radius=18)
-        pygame.draw.polygon(screen, WHITE, [(x - 13, y + 29), (x, y + 62), (x + 13, y + 29)])
-        pygame.draw.circle(screen, (212, 164, 126), (x, y), 34)
-        pygame.draw.arc(screen, (64, 44, 35), (x - 35, y - 36, 70, 60), math.pi, math.tau, 12)
-        pygame.draw.circle(screen, INK, (x - 11, y - 4), 3)
-        pygame.draw.circle(screen, INK, (x + 11, y - 4), 3)
+    def _prepare_art(self, w: int, h: int) -> None:
+        if self._art_size == (w, h):
+            return
+        self._art_size = (w, h)
+        self.room_art = pygame.transform.smoothscale(self.room_source, (w, h))
+        target_h = max(210, int(h * 0.43))
+        self.people_art = {}
+        for direction, states in self.people_source.items():
+            self.people_art[direction] = {}
+            for speaking, source in states.items():
+                target_w = round(source.get_width() * target_h / source.get_height())
+                self.people_art[direction][speaking] = pygame.transform.smoothscale(source, (target_w, target_h))
+
+    def _draw_person(self, screen: pygame.Surface, direction: str, x: int, bottom: int,
+                     active: bool, phase: float) -> None:
+        sprite = self.people_art[direction][active]
+        bounce = int(math.sin(phase * 8.0) * 3) if active else 0
+        rect = sprite.get_rect(midbottom=(x, bottom + bounce))
         if active:
-            mouth_h = 6 + int((math.sin(phase * 18.0) + 1.0) * 3)
-            pygame.draw.ellipse(screen, INK, (x - 8, y + 12, 16, mouth_h))
-            pygame.draw.circle(screen, AMBER, (x, y), 43, 4)
-        else:
-            pygame.draw.line(screen, INK, (x - 7, y + 15), (x + 7, y + 15), 2)
-        label = self.small_font.render(name, True, WHITE)
-        rect = (x - label.get_width() // 2 - 7, y + 105, label.get_width() + 14, 24)
-        pygame.draw.rect(screen, NAVY, rect, border_radius=6)
-        screen.blit(label, (x - label.get_width() // 2, y + 108))
+            glow = pygame.Surface((rect.width + 22, rect.height + 14), pygame.SRCALPHA)
+            pygame.draw.ellipse(glow, (244, 177, 72, 70), glow.get_rect())
+            screen.blit(glow, glow.get_rect(center=rect.center))
+        screen.blit(sprite, rect)
+        label = self.small_font.render(NAMES[direction], True, WHITE)
+        label_box = label.get_rect(midtop=(x, bottom + 4)).inflate(16, 8)
+        pygame.draw.rect(screen, NAVY, label_box, border_radius=7)
+        screen.blit(label, label.get_rect(center=label_box.center))
 
     def _draw_bubble(self, screen: pygame.Surface, x: int, text: str) -> None:
         font = self.small_font
         surf = font.render(text, True, INK)
         bw = min(238, surf.get_width() + 28)
         bx = max(8, min(screen.get_width() - bw - 8, x - bw // 2))
-        by = 82 if x != 400 else 210
+        by = 145
         pygame.draw.rect(screen, WHITE, (bx, by, bw, 48), border_radius=12)
         pygame.draw.rect(screen, CHASE_BLUE, (bx, by, bw, 48), 3, border_radius=12)
         tip_x = max(bx + 22, min(bx + bw - 22, x))
@@ -195,40 +212,48 @@ class simonsays(FaceMinigame):
 
     def draw(self, screen: pygame.Surface) -> None:
         w, h = screen.get_size()
-        positions = {"left": int(w * 0.14), "forward": w // 2, "right": int(w * 0.86)}
+        positions = {"left": int(w * 0.18), "forward": w // 2, "right": int(w * 0.82)}
         self._draw_room(screen, w, h)
-        screen.blit(self.font.render("WHO'S TALKING?", True, WHITE), (18, 20))
-        screen.blit(self.small_font.render(f"LISTENED  {self.done}/{TARGET_TURNS}", True, WHITE), (18, 50))
+        title_panel = pygame.Surface((235, 68), pygame.SRCALPHA)
+        pygame.draw.rect(title_panel, (7, 34, 66, 220), title_panel.get_rect(), border_radius=0)
+        screen.blit(title_panel, (0, 0))
+        screen.blit(self.font.render("WHO'S TALKING?", True, WHITE), (16, 11))
+        screen.blit(self.small_font.render(f"LISTENED  {self.done}/{TARGET_TURNS}", True, CHASE_LIGHT), (16, 43))
 
         if self.mode == "calibrate":
             self.draw_calibration(screen)
             draw_camera_preview(screen, self.tracker)
             return
 
-        for direction, jacket in (("left", (92, 64, 48)), ("forward", CHASE_BLUE),
-                                  ("right", (62, 94, 112))):
-            self._draw_person(screen, positions[direction], 300, direction == self.speaker,
-                              self.talking_t, jacket, NAMES[direction])
+        for direction in ("left", "forward", "right"):
+            self._draw_person(screen, direction, positions[direction], int(h * 0.70),
+                              direction == self.speaker, self.talking_t)
         self._draw_bubble(screen, positions[self.speaker], self.line)
 
         if self.mode == "ready":
-            pygame.draw.rect(screen, NAVY, (165, 236, 470, 82), border_radius=16)
-            draw_text_centered(screen, self.font, "WATCH WHO'S SPEAKING", WHITE, (w // 2, 260))
+            panel = pygame.Rect(0, 0, min(470, w - 40), 82)
+            panel.center = (w // 2, int(h * 0.82))
+            pygame.draw.rect(screen, NAVY, panel, border_radius=16)
+            draw_text_centered(screen, self.font, "WATCH WHO'S SPEAKING", WHITE, (w // 2, panel.y + 25))
             draw_text_centered(screen, self.small_font, "Turn left, right, or face forward", CHASE_LIGHT,
-                               (w // 2, 294))
+                               (w // 2, panel.y + 59))
         else:
             total = TURN_SECONDS * (0.82 if self.fast else 1.0) + (1.0 if self.done == 0 else 0.0)
             frac = max(0.0, self.turn_left / total)
-            draw_bar(screen, (w // 2 - 150, 365, 300, 12), frac, GREEN if frac > 0.35 else RED,
+            cue_y = int(h * 0.79)
+            cue = pygame.Surface((330, 76), pygame.SRCALPHA)
+            pygame.draw.rect(cue, (248, 248, 244, 220), cue.get_rect(), border_radius=14)
+            screen.blit(cue, cue.get_rect(center=(w // 2, cue_y)))
+            draw_bar(screen, (w // 2 - 135, cue_y + 18, 270, 10), frac, GREEN if frac > 0.35 else RED,
                      back=(167, 169, 164), radius=6)
             direction = {"left": "LOOK LEFT", "forward": "LOOK FORWARD", "right": "LOOK RIGHT"}[self.speaker]
-            draw_text_centered(screen, self.font, direction, NAVY, (w // 2, 348))
+            draw_text_centered(screen, self.font, direction, NAVY, (w // 2, cue_y - 12))
             attention = min(self.hold / HOLD_SECONDS, self.talking_t / SPEAK_SECONDS)
-            draw_bar(screen, (w // 2 - 75, 382, 150, 7), attention, CHASE_BLUE,
+            draw_bar(screen, (w // 2 - 70, cue_y + 33, 140, 6), attention, CHASE_BLUE,
                      back=(190, 191, 186), radius=4)
 
         if self.feedback_t > 0:
-            draw_text_centered(screen, self.font, self.feedback, GREEN, (w // 2, 220))
+            draw_text_centered(screen, self.font, self.feedback, GREEN, (w // 2, int(h * 0.74)))
         draw_camera_preview(screen, self.tracker)
         info = f"Face tracking: {self.tracker.backend}" if self.tracker.available else "Camera tracking unavailable"
         draw_status_line(screen, self.small_font, info)
