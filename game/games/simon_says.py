@@ -65,7 +65,7 @@ def classify(yaw_off: float, roll_off: float) -> str | None:
 class simonsays(FaceMinigame):
     """Copy the pose on the left with your head before the time bar empties."""
 
-    title = "simon says"
+    title = "Simon Says"
     after_calibration = "ready"
 
     def __init__(self, screen: pygame.Surface, tracker: FaceTracker | None = None, *,
