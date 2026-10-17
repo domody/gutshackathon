@@ -28,6 +28,9 @@ class Screen(ABC):
     def handle_event(self, event: pygame.event.Event) -> None:
         pass
 
+    def gesture_continue(self) -> None:
+        pass
+
     def update(self, dt: float) -> None:
         pass
 

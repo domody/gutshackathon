@@ -18,7 +18,7 @@ PLAYER_SPEED = 1.7
 EDGE_MARGIN = 0.16
 WARN_SECONDS = 1.15
 APPROACH_SECONDS = 2.8
-CAUGHT_SECONDS = 0.55
+VOLUNTEERED_SECONDS = 2.4
 ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 NAVY = (7, 34, 66)
@@ -86,6 +86,7 @@ class DodgeTheManager(FaceMinigame):
         self.peak_caught = 0.0
         self.encounters = 0
         self.bubble_t = 0.0
+        self.volunteered_t = 0.0
 
     def update(self, dt: float) -> None:
         if self.finished:
@@ -101,14 +102,21 @@ class DodgeTheManager(FaceMinigame):
         if offsets is not None:
             self._update_control(offsets[1])
 
+        if self.phase == "volunteered":
+            self.volunteered_t += dt
+            direction = -1 if self.side < 0 else 1
+            self.manager_u += direction * dt * 0.22
+            target = self.manager_u - direction * 0.10
+            self.player_u += (target - self.player_u) * min(1.0, dt * 5.0)
+            if self.volunteered_t >= VOLUNTEERED_SECONDS:
+                self.finish(False)
+            return
+
         self.elapsed += dt
         self.progress = min(1.0, self.elapsed / WALK_SECONDS)
         self._move_player(dt)
         self._update_manager(dt)
-        self.peak_caught = max(self.peak_caught, self.caught)
-        if self.caught >= 1.0:
-            self.finish(False)
-        elif self.progress >= 1.0:
+        if self.progress >= 1.0:
             self.finish(True)
 
     def _update_control(self, roll: float) -> None:
@@ -159,7 +167,8 @@ class DodgeTheManager(FaceMinigame):
         self.manager_u = start + (destination - start) * travel
         danger = 0.2 < p < 0.8 and abs(self.player_u - self.manager_u) < 0.13
         if danger:
-            self.caught = min(1.0, self.caught + dt / CAUGHT_SECONDS)
+            self._get_volunteered()
+            return
         else:
             self.caught = max(0.0, self.caught - dt / 0.4)
         if p >= 1.0:
@@ -167,6 +176,13 @@ class DodgeTheManager(FaceMinigame):
             self.phase_t = 0.0
             self.clear_duration = random.uniform(1.4, 2.2)
             self.caught = 0.0
+
+    def _get_volunteered(self) -> None:
+        self.phase = "volunteered"
+        self.phase_t = 0.0
+        self.volunteered_t = 0.0
+        self.caught = 1.0
+        self.bubble_t = VOLUNTEERED_SECONDS
 
     def _prepare_art(self, w: int, h: int) -> None:
         if self._scene_size == (w, h):
@@ -214,7 +230,7 @@ class DodgeTheManager(FaceMinigame):
         pygame.draw.rect(shade, (255, 244, 220, 28), (0, int(h * 0.48), w, int(h * 0.52)))
         screen.blit(shade, (0, 0))
 
-        manager_visible = self.phase in ("warning", "approach") and self.mode != "calibrate"
+        manager_visible = self.phase in ("warning", "approach", "volunteered") and self.mode != "calibrate"
         self._draw_player(screen, w, h)
         if manager_visible:
             self._draw_manager(screen, w, h)
@@ -254,10 +270,12 @@ class DodgeTheManager(FaceMinigame):
         screen.blit(sprite, (mx - sprite.get_width() // 2, bottom - sprite.get_height()))
         if self.bubble_t > 0.0:
             sprite_top = bottom - sprite.get_height()
-            self._draw_bubble(screen, mx, max(88, sprite_top - 70), w)
+            message = "Perfect, thank you for volunteering!" if self.phase == "volunteered" else "Got a minute?"
+            self._draw_bubble(screen, mx, max(88, sprite_top - 70), w, message)
 
-    def _draw_bubble(self, screen: pygame.Surface, cx: int, y: int, w: int) -> None:
-        text = self.font.render("Got a minute?", True, INK)
+    def _draw_bubble(self, screen: pygame.Surface, cx: int, y: int, w: int, message: str) -> None:
+        font = self.small_font if len(message) > 20 else self.font
+        text = font.render(message, True, INK)
         bw, bh = text.get_width() + 34, text.get_height() + 20
         bx = max(10, min(w - bw - 10, cx - bw // 2))
         pygame.draw.rect(screen, WHITE, (bx, y, bw, bh), border_radius=14)
@@ -285,7 +303,10 @@ class DodgeTheManager(FaceMinigame):
             side = "LEFT" if self.side < 0 else "RIGHT"
             draw_text_centered(screen, self.font, f"MANAGER FROM THE {side}", RED, (w // 2, 112))
 
-        if self.caught > 0.04:
+        if self.phase == "volunteered":
+            draw_text_centered(screen, self.font, "OFF TO HELP THE MANAGER...", RED, (w // 2, 112))
+
+        if self.caught > 0.04 and self.phase != "volunteered":
             draw_bar(screen, (w // 2 - 105, h - 44, 210, 14), self.caught, RED,
                      back=(70, 62, 57), radius=7)
             draw_text_centered(screen, self.small_font, "DON'T GET VOLUNTEERED", WHITE,

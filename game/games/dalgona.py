@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 
 import pygame
 
@@ -30,6 +31,7 @@ BAD = (205, 62, 62)
 GREEN = (67, 161, 103)
 AMBER = (226, 157, 47)
 WHITE = (250, 250, 247)
+ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 
 class Dalgona(Minigame):
@@ -43,6 +45,16 @@ class Dalgona(Minigame):
         self.name_font = pygame.font.Font(None, 40)
         self.body_font = pygame.font.Font(None, 25)
         self.meter_font = pygame.font.Font(None, 18)
+        self.desk_source = pygame.image.load(os.path.join(ASSET_DIR, "contract_desk.png"))
+        self.pen_source = pygame.image.load(os.path.join(ASSET_DIR, "contract_pen.png"))
+        if pygame.display.get_surface():
+            self.desk_source = self.desk_source.convert()
+            self.pen_source = self.pen_source.convert_alpha()
+        self.desk_surface: pygame.Surface | None = None
+        self.desk_size: tuple[int, int] | None = None
+        self.desk_crop = (0, 0)
+        self.desk_scale = 1.0
+        self.pen_sprite = pygame.transform.smoothscale(self.pen_source, (112, 114))
         self.start()
 
     @property
@@ -62,6 +74,10 @@ class Dalgona(Minigame):
         self.name = "WM"
         self.state = "name"
         self.page_index = 0
+        self.signature_index = 0
+        self.completed_signatures: list[
+            tuple[list[tuple[float, float]], list[list[tuple[float, float, bool]]]]
+        ] = []
         self.page_y = -height
         self.slide_time = 0.0
         self.pause_timer = 0.0
@@ -83,13 +99,33 @@ class Dalgona(Minigame):
         self._reset_name_trace()
 
     def _paper_rect(self, width: int, height: int) -> pygame.Rect:
-        paper_width = min(700, int(width * 0.72))
-        paper_top = max(138, int(height * 0.1))
-        paper_height = min(540, height - paper_top - 38)
-        return pygame.Rect(width // 2 - paper_width // 2, paper_top, paper_width, paper_height)
+        self._prepare_desk(width, height)
+        scale = self.desk_scale
+        crop_x, crop_y = self.desk_crop
+        left = round(430 * scale - crop_x) + 12
+        top = round(28 * scale - crop_y) + 28
+        right = round(1250 * scale - crop_x) - 12
+        bottom = round(914 * scale - crop_y) - 20
+        return pygame.Rect(left, top, right - left, bottom - top)
+
+    def _prepare_desk(self, width: int, height: int) -> None:
+        if self.desk_size == (width, height):
+            return
+        iw, ih = self.desk_source.get_size()
+        scale = max(width / iw, height / ih)
+        scaled_size = (max(width, round(iw * scale)), max(height, round(ih * scale)))
+        large = pygame.transform.smoothscale(self.desk_source, scaled_size)
+        crop_x = (scaled_size[0] - width) // 2
+        crop_y = (scaled_size[1] - height) // 2
+        self.desk_surface = large.subsurface((crop_x, crop_y, width, height)).copy()
+        self.desk_size = (width, height)
+        self.desk_crop = (crop_x, crop_y)
+        self.desk_scale = scale
 
     def _begin_page(self, index: int) -> None:
         self.page_index = index
+        self.signature_index = 0
+        self.completed_signatures = []
         self.state = "sliding"
         self.slide_time = 0.0
         self.page_y = -self.paper_rect.height - 30
@@ -105,24 +141,27 @@ class Dalgona(Minigame):
         self.pinching = False
 
     def _build_signature(self, page_index: int) -> list[tuple[float, float]]:
+        return self._signature_points(self.signature_index)
+
+    def _signature_points(self, signature_index: int) -> list[tuple[float, float]]:
         rect = self.paper_rect
         left = rect.x + int(rect.width * 0.19)
         right = rect.right - int(rect.width * 0.14)
-        center_y = rect.y + int(rect.height * 0.81)
+        center_y = rect.y + int(rect.height * (0.70 if signature_index == 0 else 0.84))
         width = right - left
         points: list[tuple[float, float]] = []
         count = max(80, int(width / SAMPLE_SPACING) * 2)
         for index in range(count):
             t = index / (count - 1)
             x = left + width * t
-            if page_index == 0:
-                wave = math.sin(t * math.pi * 7.5) * (1 - t * 0.5)
-                flourish = math.sin(t * math.pi * 2) * 0.35
-                y = center_y + (wave + flourish) * rect.height * 0.055
+            if signature_index == 0:
+                wave = math.sin(t * math.pi * 6.5) * (1 - t * 0.45)
+                flourish = math.sin(t * math.pi * 2.0) * 0.30
+                y = center_y + (wave + flourish) * rect.height * 0.037
             else:
-                wave = math.sin(t * math.pi * 5.5)
-                underline = math.sin(t * math.pi) * 0.28
-                y = center_y + (wave - underline) * rect.height * 0.05
+                wave = math.sin(t * math.pi * 4.5) * (0.65 + t * 0.35)
+                flourish = math.sin(t * math.pi * 3.0) * 0.22
+                y = center_y + (wave - flourish) * rect.height * 0.038
             points.append((x, y))
         return points
 
@@ -173,9 +212,9 @@ class Dalgona(Minigame):
                 self.state = "signing"
                 self.status = "Pinch and trace inside the signature guide"
             return
-        if self.state in ("name_complete", "page_complete", "retry"):
+        if self.state in ("name_complete", "signature_complete", "page_complete", "retry"):
             self.pause_timer += dt
-            pause = PAGE_PAUSE if self.state in ("name_complete", "page_complete") else RETRY_PAUSE
+            pause = PAGE_PAUSE if self.state in ("name_complete", "signature_complete", "page_complete") else RETRY_PAUSE
             if self.pause_timer < pause:
                 return
             if self.state == "retry":
@@ -189,6 +228,11 @@ class Dalgona(Minigame):
                     self.status = "Try again - keep the pen inside the guide"
             elif self.state == "name_complete":
                 self._begin_page(0)
+            elif self.state == "signature_complete":
+                self.signature_index = 1
+                self._reset_signature()
+                self.state = "signing"
+                self.status = "Now sign the NDA"
             else:
                 self.result = True
                 self.end_timer = 0.0
@@ -205,10 +249,15 @@ class Dalgona(Minigame):
             self.pinching = False
             self.status = "Outside the lines - this copy is void"
         elif self.coverage >= WIN_COVERAGE:
-            self.state = "page_complete"
+            if self.signature_index == 0:
+                self.completed_signatures.append((self.samples.copy(), [stroke.copy() for stroke in self.strokes]))
+                self.state = "signature_complete"
+                self.status = "Internship agreement signed"
+            else:
+                self.state = "page_complete"
+                self.status = "Both documents signed and witnessed"
             self.pause_timer = 0.0
             self.pinching = False
-            self.status = "Signed and witnessed"
 
     def _trace_input(self, position: tuple[float, float], pinch: bool) -> None:
         was_pinching = self.pinching
@@ -303,17 +352,11 @@ class Dalgona(Minigame):
             draw_text_centered(screen, self.font, "Welcome aboard. Legal will be in touch.", WHITE, (width // 2, height // 2 + 25))
 
     def _draw_desk(self, screen: pygame.Surface, width: int, height: int) -> None:
-        screen.fill(DESK)
-        for y in range(20, height, 54):
-            pygame.draw.line(screen, DESK_GRAIN, (0, y), (width, y + 14), 2)
-        pygame.draw.rect(screen, (25, 31, 37), (20, 14, 255, 54), border_radius=10)
-        title = self.document_font.render("CONTRACT SIGNING DAY", True, WHITE)
-        screen.blit(title, title.get_rect(center=(147, 41)))
+        self._prepare_desk(width, height)
+        screen.blit(self.desk_surface, (0, 0))
 
     def _draw_name_entry(self, screen: pygame.Surface, width: int, height: int) -> None:
-        card = pygame.Rect(width // 2 - min(350, width // 2 - 30), 82, min(700, width - 60), height - 120)
-        pygame.draw.rect(screen, PAPER_SHADOW, card.move(10, 12), border_radius=14)
-        pygame.draw.rect(screen, PAPER, card, border_radius=14)
+        card = self.paper_rect
         draw_text_centered(screen, self.heading_font, "Add Your Name", INK, (width // 2, card.y + 58))
         draw_text_centered(screen, self.font, "Pinch and trace the outlined WM", MUTED, (width // 2, card.y + 101))
         for sample, done in zip(self.samples, self.covered):
@@ -336,9 +379,6 @@ class Dalgona(Minigame):
         rect = self.paper_rect.copy()
         rect.y = int(self.page_y)
         offset = rect.y - self.paper_rect.y
-        pygame.draw.rect(screen, PAPER_SHADOW, rect.move(10, 12), border_radius=5)
-        pygame.draw.rect(screen, PAPER, rect, border_radius=5)
-        pygame.draw.rect(screen, (221, 216, 201), rect, width=2, border_radius=5)
 
         page_title = "INTERNSHIP AGREEMENT + NDA"
         title = self.heading_font.render(page_title, True, INK)
@@ -353,23 +393,44 @@ class Dalgona(Minigame):
         screen.blit(name, (rect.x + 48, rect.y + 134))
         pygame.draw.line(screen, INK, (rect.x + 45, rect.y + 176), (rect.right - 45, rect.y + 176), 2)
 
-        lines = (
-            "INTERNSHIP: I agree to attend meetings, answer emails,",
-            "and pretend to understand the shared drive",
-            "naming convention.",
-            "NDA: I agree not to disclose confidential information,",
-            "including who keeps stealing lunch from the fridge.",
-        )
+        lines: list[str] = []
+        for paragraph in (
+            "INTERNSHIP: I agree to attend meetings, answer emails, and pretend to understand the shared drive naming convention.",
+            "NDA: I agree not to disclose confidential information, including who keeps stealing lunch from the fridge.",
+        ):
+            line = ""
+            for word in paragraph.split():
+                trial = f"{line} {word}".strip()
+                if line and self.body_font.size(trial)[0] > rect.width - 96:
+                    lines.append(line)
+                    line = word
+                else:
+                    line = trial
+            if line:
+                lines.append(line)
         for index, line in enumerate(lines):
             body = self.body_font.render(line, True, INK)
-            screen.blit(body, (rect.x + 48, rect.y + 190 + index * 22))
+            screen.blit(body, (rect.x + 48, rect.y + 185 + index * 21))
 
-        signature_y = rect.y + int(rect.height * 0.70)
-        label = self.small_font.render("AUTHORIZED SIGNATURE - TRACE THE GUIDE", True, BLUE)
-        screen.blit(label, (rect.x + 48, signature_y))
-        pygame.draw.line(screen, MUTED, (rect.x + 48, rect.y + int(rect.height * 0.89)), (rect.right - 48, rect.y + int(rect.height * 0.89)), 2)
+        first_label_y = rect.y + int(rect.height * 0.61)
+        second_label_y = rect.y + int(rect.height * 0.75)
+        first_label = self.small_font.render("INTERNSHIP AGREEMENT SIGNATURE", True, BLUE)
+        second_label = self.small_font.render("NDA SIGNATURE", True, BLUE)
+        screen.blit(first_label, (rect.x + 48, first_label_y))
+        screen.blit(second_label, (rect.x + 48, second_label_y))
+        pygame.draw.line(screen, MUTED, (rect.x + 48, rect.y + int(rect.height * 0.735)), (rect.right - 48, rect.y + int(rect.height * 0.735)), 2)
+        pygame.draw.line(screen, MUTED, (rect.x + 48, rect.y + int(rect.height * 0.875)), (rect.right - 48, rect.y + int(rect.height * 0.875)), 2)
 
         if abs(offset) < 1:
+            if self.signature_index == 0:
+                for sample in self._signature_points(1):
+                    pygame.draw.circle(screen, (190, 204, 214), (int(sample[0]), int(sample[1])), 2)
+            for saved_samples, saved_strokes in self.completed_signatures:
+                for sample in saved_samples:
+                    pygame.draw.circle(screen, SIGNED, (int(sample[0]), int(sample[1])), 4)
+                for stroke in saved_strokes:
+                    for first, second in zip(stroke, stroke[1:]):
+                        pygame.draw.line(screen, SIGNED if second[2] else BAD, (first[0], first[1]), (second[0], second[1]), 4)
             for sample, done in zip(self.samples, self.covered):
                 color = SIGNED if done else GUIDE
                 radius = 4 if done else 3
@@ -382,7 +443,10 @@ class Dalgona(Minigame):
         footer = self.small_font.render("Page 2 of 2", True, MUTED)
         screen.blit(footer, footer.get_rect(midbottom=(rect.centerx, rect.bottom - 18)))
 
-        if self.state == "page_complete":
+        if self.state == "signature_complete":
+            signed = self.document_font.render("INTERNSHIP SIGNED", True, GREEN)
+            screen.blit(signed, signed.get_rect(midright=(rect.right - 48, first_label_y + 8)))
+        elif self.state == "page_complete":
             stamp = self.heading_font.render("SIGNED", True, GREEN)
             stamp_rect = stamp.get_rect(center=(rect.right - 120, rect.y + 118)).inflate(20, 10)
             pygame.draw.rect(screen, GREEN, stamp_rect, width=5, border_radius=5)
@@ -396,11 +460,13 @@ class Dalgona(Minigame):
     def _draw_pointer(self, screen: pygame.Surface) -> None:
         if self.state not in ("name", "signing"):
             return
-        color = BAD if self.pinching else BLUE
         x, y = int(self.pointer[0]), int(self.pointer[1])
-        pygame.draw.circle(screen, WHITE, (x, y), 13)
-        pygame.draw.circle(screen, color, (x, y), 13, 3)
-        pygame.draw.line(screen, color, (x + 9, y - 9), (x + 25, y - 25), 5)
+        pen = self.pen_sprite
+        nib_x = int(pen.get_width() * 0.245)
+        nib_y = int(pen.get_height() * 0.94)
+        if self.pinching:
+            pygame.draw.circle(screen, SIGNED, (x, y), 5)
+        screen.blit(pen, (x - nib_x, y - nib_y))
 
     def _draw_hud(self, screen: pygame.Surface, width: int, height: int) -> None:
         if self.state == "sliding":
@@ -413,7 +479,3 @@ class Dalgona(Minigame):
         draw_bar(screen, (panel.x + 9, panel.y + 31, panel.width - 18, 10), progress, GREEN, back=(66, 72, 77), radius=5)
         screen.blit(self.meter_font.render("ERROR", True, WHITE), (panel.x + 9, panel.y + 56))
         draw_bar(screen, (panel.x + 9, panel.y + 77, panel.width - 18, 10), damage, BAD, back=(66, 72, 77), radius=5)
-        status = self.small_font.render(self.status, True, WHITE)
-        status_box = status.get_rect(midtop=(width // 2, 82)).inflate(24, 10)
-        pygame.draw.rect(screen, (25, 31, 37), status_box, border_radius=8)
-        screen.blit(status, status.get_rect(center=status_box.center))
