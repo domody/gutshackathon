@@ -3,7 +3,8 @@ from typing import Callable
 import pygame
 
 from game.minigame import Action, Minigame
-from game.ui.screen import Screen
+from game.ui.screen import BLANK, Screen
+from game.ui.typewriter import Typewriter
 
 
 class MinigameIntro(Screen):
@@ -21,6 +22,9 @@ class MinigameIntro(Screen):
     BUTTON_HOVER = (110, 230, 150)
     BUTTON_TEXT = (20, 20, 30)
 
+    fade_out = 0.5
+    background = BLANK
+
     def __init__(self, minigame: Minigame, on_okay: Callable[[], None]) -> None:
         self.minigame = minigame
         self.on_okay = on_okay
@@ -30,8 +34,14 @@ class MinigameIntro(Screen):
         self._desc_font = pygame.font.Font(None, self.DESC_SIZE)
         self._button_font = pygame.font.Font(None, self.BUTTON_SIZE)
         self._button_rect = pygame.Rect(0, 0, 0, 0)
+        self._writer = Typewriter(60)
+
+    def update(self, dt: float) -> None:
+        self._writer.update(dt)
 
     def handle_event(self, event: pygame.event.Event) -> None:
+        if not self._writer.done:
+            return
         if event.type == pygame.KEYDOWN and event.key in (
             pygame.K_RETURN,
             pygame.K_SPACE,
@@ -44,14 +54,13 @@ class MinigameIntro(Screen):
     def draw(self, surface: pygame.Surface) -> None:
         width, height = surface.get_size()
         center_x = width // 2
+        w = self._writer
+        w.begin()
 
-        title = self._title_font.render(self.minigame.title, True, self.TITLE_COLOR)
-        title_rect = title.get_rect(midtop=(center_x, height // 8))
-        surface.blit(title, title_rect)
-
-        subtitle = self._subtitle_font.render("Actions", True, self.TEXT_COLOR)
-        subtitle_rect = subtitle.get_rect(midtop=(center_x, title_rect.bottom + 30))
-        surface.blit(subtitle, subtitle_rect)
+        title_rect = w.draw(surface, self._title_font, self.minigame.title, self.TITLE_COLOR,
+                            midtop=(center_x, height // 8))
+        subtitle_rect = w.draw(surface, self._subtitle_font, "Actions", self.TEXT_COLOR,
+                               midtop=(center_x, title_rect.bottom + 30))
 
         top = subtitle_rect.bottom + 40
         bottom = top
@@ -59,18 +68,18 @@ class MinigameIntro(Screen):
             col_x = width * (2 * i + 1) // 4
             bottom = max(bottom, self._draw_action(surface, action, col_x, top))
 
-        self._draw_button(surface, center_x, bottom + 60)
+        w.end()
+        if w.done:
+            self._draw_button(surface, center_x, bottom + 60)
 
     def _draw_action(
         self, surface: pygame.Surface, action: Action, center_x: int, top: int
     ) -> int:
-        name = self._name_font.render(action.name, True, self.TEXT_COLOR)
-        name_rect = name.get_rect(midtop=(center_x, top))
-        surface.blit(name, name_rect)
-
-        desc = self._desc_font.render(action.description, True, self.DESC_COLOR)
-        desc_rect = desc.get_rect(midtop=(center_x, name_rect.bottom + 12))
-        surface.blit(desc, desc_rect)
+        w = self._writer
+        name_rect = w.draw(surface, self._name_font, action.name, self.TEXT_COLOR,
+                           midtop=(center_x, top))
+        desc_rect = w.draw(surface, self._desc_font, action.description, self.DESC_COLOR,
+                           midtop=(center_x, name_rect.bottom + 12))
         return desc_rect.bottom
 
     def _draw_button(self, surface: pygame.Surface, center_x: int, top: int) -> None:

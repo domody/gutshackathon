@@ -2,7 +2,7 @@ import random
 
 import pygame
 
-from game.games import CatchOrDrop, CoffeeRun, Dalgona, RedLightGreenLight, SpotlightDodge, TugOfWar, simonsays
+from game.games import CatchOrDrop, CoffeeRun, Dalgona, RedLightGreenLight, DodgeTheManager, TugOfWar, simonsays
 from game.minigame import Minigame
 from game.settings import Settings
 from game.ui import ScreenManager
@@ -24,7 +24,7 @@ class Game:
         self.clock = pygame.time.Clock()
         self.running = False
         self.minigames: list[type[Minigame]] = [
-            Dalgona, RedLightGreenLight, simonsays, SpotlightDodge, CatchOrDrop, TugOfWar, CoffeeRun,
+            Dalgona, RedLightGreenLight, simonsays, DodgeTheManager, CatchOrDrop, TugOfWar, CoffeeRun,
         ]
         self.remaining: list[type[Minigame]] = []
         self.minigame: Minigame | None = None
@@ -53,9 +53,11 @@ class Game:
         self.ui.show(MinigameIntro(self.minigame, self.begin_minigame))
 
     def begin_minigame(self) -> None:
-        self.ui.clear()
-        if self.minigame:
-            self.minigame.start()
+        """Start the minigame and fade the intro out over it."""
+        if not self.minigame:
+            return
+        self.minigame.start()
+        self.ui.dismiss(self.ui.clear, fade_background=True, backdrop=self.minigame.draw)
 
     def tutorial(self) -> None:
         pass
@@ -85,12 +87,15 @@ class Game:
     def update(self, dt: float) -> None:
         if self.ui.active:
             self.ui.update(dt)
+            if self.ui.leaving and self.minigame:
+                self.minigame.update(dt)  # runs under the fade-out
         elif self.minigame:
             self.minigame.update(dt)
             if self.minigame.finished:
                 self.minigame.close()
                 result = PassScreen if self.minigame.won else FailScreen
-                self.ui.show(result(self.next_minigame))
+                screen = result(lambda: self.ui.dismiss(self.next_minigame))
+                self.ui.show(screen, backdrop=self.minigame.draw)
 
     def draw(self) -> None:
         self.screen.fill(self.settings.background)
