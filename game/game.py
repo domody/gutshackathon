@@ -1,6 +1,6 @@
 import pygame
 
-from game.games import LaneDodge
+from game.games import Dalgona
 from game.menu import Menu, MenuItem
 from game.minigame import Minigame
 from game.settings import Settings
@@ -31,7 +31,7 @@ class Game:
         )
 
     def start_game(self) -> None:
-        self.minigame = LaneDodge(self.screen)
+        self.minigame = Dalgona(self.screen)
         self.minigame.start()
 
     def tutorial(self) -> None:
@@ -62,6 +62,7 @@ class Game:
         if self.minigame:
             self.minigame.update(dt)
             if self.minigame.finished:
+                self.minigame.close()
                 self.minigame = None
 
     def draw(self) -> None:
