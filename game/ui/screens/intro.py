@@ -3,9 +3,10 @@ from typing import Callable
 import pygame
 
 from game.minigame import Action, Minigame
+from game.ui.screen import Screen
 
 
-class MinigameIntro:
+class MinigameIntro(Screen):
     """Pre-game screen: title, the two actions side by side, and an Okay button."""
 
     TITLE_SIZE = 96

@@ -3,10 +3,10 @@ import random
 import pygame
 
 from game.games import Dalgona, RedLightGreenLight, SpotlightDodge, simonsays
-from game.intro import MinigameIntro
-from game.menu import Menu, MenuItem
 from game.minigame import Minigame
 from game.settings import Settings
+from game.ui import ScreenManager
+from game.ui.screens import FailScreen, Menu, MenuItem, MinigameIntro, PassScreen
 
 
 class Game:
@@ -26,7 +26,7 @@ class Game:
         self.minigames: list[type[Minigame]] = [Dalgona, RedLightGreenLight, simonsays, SpotlightDodge]
         self.remaining: list[type[Minigame]] = []
         self.minigame: Minigame | None = None
-        self.intro: MinigameIntro | None = None
+        self.ui = ScreenManager()
         self.menu = Menu(
             self.settings.title,
             [
@@ -44,13 +44,14 @@ class Game:
         """Start a random remaining minigame, or return to the menu when none are left."""
         if not self.remaining:
             self.minigame = None
+            self.ui.show(self.menu)
             return
         cls = self.remaining.pop(random.randrange(len(self.remaining)))
         self.minigame = cls(self.screen)
-        self.intro = MinigameIntro(self.minigame, self.begin_minigame)
+        self.ui.show(MinigameIntro(self.minigame, self.begin_minigame))
 
     def begin_minigame(self) -> None:
-        self.intro = None
+        self.ui.clear()
         if self.minigame:
             self.minigame.start()
 
@@ -62,6 +63,7 @@ class Game:
 
     def run(self) -> None:
         self.running = True
+        self.ui.show(self.menu)
         while self.running:
             dt = self.clock.tick(self.settings.fps) / 1000
             self.handle_events()
@@ -73,26 +75,25 @@ class Game:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.quit()
-            elif self.intro:
-                self.intro.handle_event(event)
+            elif self.ui.active:
+                self.ui.handle_event(event)
             elif self.minigame:
                 self.minigame.handle_event(event)
-            else:
-                self.menu.handle_event(event)
 
     def update(self, dt: float) -> None:
-        if self.minigame and not self.intro:
+        if self.ui.active:
+            self.ui.update(dt)
+        elif self.minigame:
             self.minigame.update(dt)
             if self.minigame.finished:
                 self.minigame.close()
-                self.next_minigame()
+                result = PassScreen if self.minigame.won else FailScreen
+                self.ui.show(result(self.next_minigame))
 
     def draw(self) -> None:
         self.screen.fill(self.settings.background)
-        if self.intro:
-            self.intro.draw(self.screen)
+        if self.ui.active:
+            self.ui.draw(self.screen)
         elif self.minigame:
             self.minigame.draw(self.screen)
-        else:
-            self.menu.draw(self.screen)
         pygame.display.flip()
