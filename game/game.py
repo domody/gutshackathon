@@ -2,7 +2,7 @@ import random
 
 import pygame
 
-from game.games import Dalgona, RedLightGreenLight, SpotlightDodge, simonsays
+from game.games import Dalgona, RedLightGreenLight, SpotlightDodge, simonsays, WatcherPeek
 from game.menu import Menu, MenuItem
 from game.minigame import Minigame
 from game.settings import Settings
@@ -22,7 +22,7 @@ class Game:
         pygame.display.set_caption(self.settings.title)
         self.clock = pygame.time.Clock()
         self.running = False
-        self.minigames: list[type[Minigame]] = [Dalgona, RedLightGreenLight, simonsays, SpotlightDodge]
+        self.minigames: list[type[Minigame]] = [Dalgona, RedLightGreenLight, simonsays, SpotlightDodge, WatcherPeek]
         self.remaining: list[type[Minigame]] = []
         self.minigame: Minigame | None = None
         self.menu = Menu(
