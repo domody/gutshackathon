@@ -13,6 +13,10 @@ class Typewriter:
     def update(self, dt: float) -> None:
         self._typed += dt * self.chars_per_sec
 
+    def finish(self) -> None:
+        """Reveal everything immediately."""
+        self._typed = 1e9
+
     def begin(self) -> None:
         """Call at the start of each draw."""
         self._cursor = 0

@@ -3,7 +3,7 @@ from typing import Callable
 import pygame
 
 from game.minigame import Action, Minigame
-from game.ui.screen import BLANK, Screen
+from game.ui.screen import Screen
 from game.ui.typewriter import Typewriter
 
 
@@ -22,8 +22,11 @@ class MinigameIntro(Screen):
     BUTTON_HOVER = (110, 230, 150)
     BUTTON_TEXT = (20, 20, 30)
 
+    OVERLAY_COLOR = (12, 12, 22, 185)  # ~72% dark over the game's first frame
+
+    fade_in = 0.4
     fade_out = 0.5
-    background = BLANK
+    overlay = True
 
     def __init__(self, minigame: Minigame, on_okay: Callable[[], None]) -> None:
         self.minigame = minigame
@@ -35,9 +38,16 @@ class MinigameIntro(Screen):
         self._button_font = pygame.font.Font(None, self.BUTTON_SIZE)
         self._button_rect = pygame.Rect(0, 0, 0, 0)
         self._writer = Typewriter(60)
+        self._dim: pygame.Surface | None = None
 
     def update(self, dt: float) -> None:
         self._writer.update(dt)
+
+    def draw_background(self, surface: pygame.Surface) -> None:
+        if self._dim is None or self._dim.get_size() != surface.get_size():
+            self._dim = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+            self._dim.fill(self.OVERLAY_COLOR)
+        surface.blit(self._dim, (0, 0))
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if not self._writer.done:

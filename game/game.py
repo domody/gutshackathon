@@ -1,12 +1,11 @@
-import random
-
 import pygame
 
 from game.games import CatchOrDrop, CoffeeRun, Dalgona, RedLightGreenLight, DodgeTheManager, TugOfWar, simonsays
 from game.minigame import Minigame
+from game.scenes import SCENES
 from game.settings import Settings
 from game.ui import ScreenManager
-from game.ui.screens import FailScreen, Menu, MenuItem, MinigameIntro, PassScreen
+from game.ui.screens import FailScreen, Menu, MenuItem, MinigameIntro, PassScreen, SceneScreen
 
 
 class Game:
@@ -24,7 +23,7 @@ class Game:
         self.clock = pygame.time.Clock()
         self.running = False
         self.minigames: list[type[Minigame]] = [
-            Dalgona, RedLightGreenLight, simonsays, DodgeTheManager, CatchOrDrop, TugOfWar, CoffeeRun,
+            Dalgona, RedLightGreenLight, simonsays, DodgeTheManager, CatchOrDrop, CoffeeRun, TugOfWar,
         ]
         self.remaining: list[type[Minigame]] = []
         self.minigame: Minigame | None = None
@@ -42,14 +41,27 @@ class Game:
         self.next_minigame()
 
     def next_minigame(self) -> None:
-        """Start a random remaining minigame, or return to the menu when none are left."""
+        """Start the next minigame in order, or return to the menu when none are left."""
         if not self.remaining:
             self.minigame = None
             self.ui.show(self.menu)
             return
-        cls = self.remaining.pop(random.randrange(len(self.remaining)))
+        cls = self.remaining.pop(0)
         self.minigame = cls(self.screen)
-        self.ui.show(MinigameIntro(self.minigame, self.begin_minigame))
+        scene = SCENES.get(cls)
+        if scene is None:
+            self.show_intro()
+            return
+        minigame = self.minigame
+        self.ui.show(SceneScreen(
+            scene.image, scene.text, scene.speaker,
+            lambda: self.ui.dismiss(self.show_intro, fade_background=True, backdrop=minigame.draw),
+        ))
+
+    def show_intro(self) -> None:
+        """Overlay the intro on the minigame's first frame."""
+        if self.minigame:
+            self.ui.show(MinigameIntro(self.minigame, self.begin_minigame))
 
     def begin_minigame(self) -> None:
         """Start the minigame and fade the intro out over it."""
@@ -95,6 +107,8 @@ class Game:
 
     def draw(self) -> None:
         self.screen.fill(self.settings.background)
+        if self.minigame and self.ui.current and self.ui.current.overlay:
+            self.minigame.draw(self.screen)
         if self.ui.active:
             self.ui.draw(self.screen)
         elif self.minigame:

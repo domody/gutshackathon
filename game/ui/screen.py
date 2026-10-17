@@ -13,6 +13,8 @@ class Screen(ABC):
     fade_out = 0.0
     background: tuple[int, int, int] | None = None  # opaque backdrop behind the content
 
+    overlay = False  # draws over the live game instead of a backdrop
+
     def on_enter(self) -> None:
         """Called when the screen becomes active."""
 
