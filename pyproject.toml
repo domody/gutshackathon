@@ -3,5 +3,7 @@ name = "gutshackathon"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
+    "mediapipe>=0.10.31",
+    "numpy>=2.0",
     "pygame-ce>=2.5.8",
 ]

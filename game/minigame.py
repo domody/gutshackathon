@@ -41,6 +41,9 @@ class Minigame(ABC):
     def draw(self, screen: pygame.Surface) -> None:
         pass
 
+    def close(self) -> None:
+        pass
+
     def finish(self, won: bool) -> None:
         self.finished = True
         self.won = won
