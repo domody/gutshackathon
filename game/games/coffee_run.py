@@ -64,7 +64,7 @@ def lerp_color(a: tuple[int, int, int], b: tuple[int, int, int], t: float) -> tu
 class CoffeeRun(FaceMinigame):
     """Tilt your head to keep the wobbling cup level. Don't spill the coffee."""
 
-    title = "coffee run"
+    title = "Coffee Run"
     after_calibration = "ready"
 
     def __init__(self, screen: pygame.Surface, tracker: FaceTracker | None = None) -> None:
