@@ -1,8 +1,10 @@
+from collections.abc import Callable
+
 import pygame
 
-from game.games import CatchOrDrop, CoffeeRun, Dalgona, RedLightGreenLight, DodgeTheManager, TugOfWar, simonsays
+from game.games import CatchOrDrop, CoffeeRun, Dalgona, RedLightGreenLight, DodgeTheManager, PaperSort, TugOfWar, simonsays
 from game.minigame import Minigame
-from game.scenes import SCENES
+from game.scenes import AFTER_SCENES, BEFORE_SCENES, Scene
 from game.settings import Settings
 from game.tracking import HandTracker
 from game.ui import ScreenManager, draw_score
@@ -62,15 +64,28 @@ class Game:
         self.minigame.close()
         self.navigation_tracker.start()
         self.pinch_was_down = False
-        scene = SCENES.get(cls)
-        if scene is None:
-            self.show_intro()
+        self._show_scene_sequence(BEFORE_SCENES.get(cls, ()), self.show_intro)
+
+    def _show_scene_sequence(self, scenes: tuple[Scene, ...], after: Callable[[], None]) -> None:
+        if not scenes:
+            after()
             return
-        minigame = self.minigame
+        scene = scenes[0]
+        backdrop = self.minigame.draw if self.minigame else None
         self.ui.show(SceneScreen(
-            scene.image, scene.text, scene.speaker,
-            lambda: self.ui.dismiss(self.show_intro, fade_background=True, backdrop=minigame.draw),
+            scene.image,
+            scene.text,
+            scene.speaker,
+            lambda: self.ui.dismiss(
+                lambda: self._show_scene_sequence(scenes[1:], after),
+                fade_background=True,
+                backdrop=backdrop,
+            ),
         ))
+
+    def _after_result(self, game_type: type[Minigame], won: bool) -> None:
+        scenes = AFTER_SCENES.get(game_type, ()) if won else ()
+        self._show_scene_sequence(scenes, self.next_minigame)
 
     def show_intro(self) -> None:
         """Overlay the intro on the minigame's first frame."""
@@ -129,6 +144,13 @@ class Game:
                 self.pinch_was_down = False
                 self.strikes = self.minigame.day_strikes
                 self.total_score += self.minigame.score
+                game_type = type(self.minigame)
+                won = self.minigame.won
+                if (game_type is DodgeTheManager and self.minigame.phase == "volunteered"
+                        and self.strikes < self.minigame.strike_limit):
+                    self.remaining.insert(0, PaperSort)
+                    self.next_minigame()
+                    return
                 if self.strikes >= 3:
                     self.remaining.clear()
                     screen = FiredScreen(
@@ -139,7 +161,7 @@ class Game:
                 else:
                     result = PassScreen if self.minigame.won else FailScreen
                     screen = result(
-                        lambda: self.ui.dismiss(self.next_minigame),
+                        lambda: self.ui.dismiss(lambda: self._after_result(game_type, won)),
                         total_score=self.total_score,
                         round_score=self.minigame.score,
                     )

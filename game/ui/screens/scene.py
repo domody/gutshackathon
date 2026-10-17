@@ -31,7 +31,9 @@ class SceneScreen(Screen):
         self.text = text
         self.speaker = speaker
         self.on_continue = on_continue
-        self._image = pygame.image.load(SCENES_DIR / f"{image}.png").convert()
+        path = next((candidate for candidate in (SCENES_DIR / f"{image}.png", SCENES_DIR / f"{image}.jpg")
+                     if candidate.exists()), SCENES_DIR / f"{image}.png")
+        self._image = pygame.image.load(path).convert()
         self._scaled: pygame.Surface | None = None
         self._name_font = pygame.font.Font(None, self.NAME_SIZE)
         self._text_font = pygame.font.Font(None, self.TEXT_SIZE)
