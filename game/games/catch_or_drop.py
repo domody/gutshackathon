@@ -77,10 +77,14 @@ class CatchOrDrop(Minigame):
             Action("Fist", "Make a fist to let a P45 fall"),
         )
 
+    @property
+    def negative_progress(self) -> float:
+        return 1.0 - self.lives / LIVES
+
     def start(self) -> None:
         super().start()
         self.elapsed = 0.0
-        self.score = 0
+        self.successful_items = 0
         self.lives = LIVES
         self.spawned = 0
         self.resolved = 0
@@ -195,7 +199,7 @@ class CatchOrDrop(Minigame):
             self._failure("SHOW A FIST!")
 
     def _success(self, text: str) -> None:
-        self.score += 1
+        self.successful_items += 1
         self.flash_text, self.flash_color, self.flash_t = text, GOOD_COLOR, FLASH_SECONDS
 
     def _failure(self, text: str) -> None:

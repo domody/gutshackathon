@@ -41,6 +41,7 @@ class Game:
 
     def start_game(self) -> None:
         self.strikes = 0
+        self.total_score = 0
         self.remaining = self.minigames.copy()
         self.next_minigame()
 
@@ -112,7 +113,7 @@ class Game:
                 self.ui.handle_event(event)
             elif (self.minigame and event.type == pygame.KEYDOWN
                   and event.key == pygame.K_k):
-                self.minigame.finish(True)
+                self.minigame.finish(True, score_override=self.minigame.BASE_SCORE)
 
     def update(self, dt: float) -> None:
         if self.ui.active:
@@ -127,12 +128,21 @@ class Game:
                 self.navigation_tracker.start()
                 self.pinch_was_down = False
                 self.strikes = self.minigame.day_strikes
+                self.total_score += self.minigame.score
                 if self.strikes >= 3:
                     self.remaining.clear()
-                    screen = FiredScreen(lambda: self.ui.dismiss(self.next_minigame))
+                    screen = FiredScreen(
+                        lambda: self.ui.dismiss(self.next_minigame),
+                        total_score=self.total_score,
+                        round_score=self.minigame.score,
+                    )
                 else:
                     result = PassScreen if self.minigame.won else FailScreen
-                    screen = result(lambda: self.ui.dismiss(self.next_minigame))
+                    screen = result(
+                        lambda: self.ui.dismiss(self.next_minigame),
+                        total_score=self.total_score,
+                        round_score=self.minigame.score,
+                    )
                     if not self.minigame.won:
                         screen.DESCRIPTION = f"Strike {self.strikes} of 3."
                 self.ui.show(screen, backdrop=self.minigame.draw)
@@ -154,4 +164,14 @@ class Game:
             self.ui.draw(self.screen)
         elif self.minigame:
             self.minigame.draw(self.screen)
+        if self.minigame:
+            tracker = self.minigame.tracker
+            result_screen = self.ui.current
+            displayed_score = getattr(result_screen, "display_score", self.total_score)
+            draw_score(
+                self.screen,
+                self.minigame.small_font,
+                displayed_score,
+                camera_available=tracker is not None and tracker.available,
+            )
         pygame.display.flip()

@@ -89,6 +89,10 @@ class RedLightGreenLight(CalibratedMinigame):
             Action("Act Natural", "Stand still to walk casually past colleagues"),
         )
 
+    @property
+    def negative_progress(self) -> float:
+        return self.caught_count / self.strike_limit
+
     def start(self) -> None:
         super().start()
         self.elapsed = 0.0
@@ -97,6 +101,7 @@ class RedLightGreenLight(CalibratedMinigame):
         self.phase_time = 0.0
         self.phase_duration = FIRST_CLEAR_SECONDS
         self.encounter = 0
+        self.caught_count = 0
         self.exposure = 0.0
         self.caught_this_encounter = False
         self.chat_timer = 0.0
@@ -212,6 +217,7 @@ class RedLightGreenLight(CalibratedMinigame):
 
     def _get_caught(self) -> None:
         self.caught_this_encounter = True
+        self.caught_count += 1
         self.record_strike()
         if self.day_strikes >= self.strike_limit:
             self.finish(False)

@@ -21,6 +21,8 @@ class Action:
 class Minigame(ABC):
     """Base class for minigames. Subclasses implement the logic and expose two actions."""
 
+    BASE_SCORE = 1000
+    MIN_SCORE = 200
     title: str = "Minigame"
     tracker_cls: type[CameraTracker] | None = None  # Set this to enable camera tracking.
 
@@ -28,6 +30,7 @@ class Minigame(ABC):
         self.screen = screen
         self.finished = False
         self.won = False
+        self._score = 0
         self.day_strikes = 0
         self.strike_limit = 3
         self.strike_earned = False
@@ -54,7 +57,16 @@ class Minigame(ABC):
         """Reset state when the minigame begins. Subclasses call super().start()."""
         self.finished = False
         self.won = False
+        self._score = 0
         self.strike_earned = False
+
+    @property
+    def negative_progress(self) -> float:
+        return 0.0
+
+    @property
+    def score(self) -> int:
+        return self._score
 
     def update(self, dt: float) -> None:
         pass
@@ -67,9 +79,15 @@ class Minigame(ABC):
         if self._owns_tracker and self.tracker is not None:
             self.tracker.stop()
 
-    def finish(self, won: bool) -> None:
+    def finish(self, won: bool, *, score_override: int | None = None) -> None:
         if self.finished:
             return
+        penalty = max(0.0, min(1.0, self.negative_progress))
+        self._score = (
+            min(self.BASE_SCORE, max(0, score_override))
+            if score_override is not None
+            else round(self.MIN_SCORE + (self.BASE_SCORE - self.MIN_SCORE) * (1 - penalty**3))
+        )
         if not won:
             self.record_strike()
         self.finished = True

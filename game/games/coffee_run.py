@@ -79,6 +79,10 @@ class CoffeeRun(FaceMinigame):
             Action("Tilt Right", "Tilt your head right to correct the cup"),
         )
 
+    @property
+    def negative_progress(self) -> float:
+        return self.spilled
+
     def start(self) -> None:
         super().start()
         self.elapsed = 0.0

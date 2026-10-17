@@ -32,3 +32,13 @@ def draw_camera_preview(screen: pygame.Surface, tracker) -> None:
 def draw_status_line(screen: pygame.Surface, font: pygame.font.Font, text: str,
                      color: tuple[int, int, int] = STATUS_COLOR) -> None:
     screen.blit(font.render(text, True, color), (10, screen.get_height() - 28))
+
+
+def draw_score(screen: pygame.Surface, font: pygame.font.Font, score: int,
+               camera_available: bool = False) -> None:
+    """Draw the current score at the right edge, below the camera preview when present."""
+    text = font.render(f"SCORE {score:,}", True, (255, 255, 255))
+    top = 138 if camera_available else 12
+    rect = text.get_rect(topright=(screen.get_width() - 14, top)).inflate(20, 12)
+    pygame.draw.rect(screen, (20, 20, 30), rect, border_radius=8)
+    screen.blit(text, text.get_rect(center=rect.center))
