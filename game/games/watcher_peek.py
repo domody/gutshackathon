@@ -1,22 +1,30 @@
-"""Peek Past the Watcher: keep your eyes closed, peek only when the Watcher's eyes are shut.
+"""Sneak a Look: peek at your performance review while the line manager isn't watching.
+
+The scene: your manager sits at their desk with your performance review. Your eyes are
+CLOSED most of the time (you are "not looking"). Open them to read the review - but only
+while the manager's eyes are down on their screen.
 
 How it plays:
-  * Your eyes are CLOSED most of the time.
-  * Opening your eyes fills your PROGRESS bar - but only while the Watcher's eyes are closed.
-  * If your eyes are open while the Watcher's eyes are open, the DETECTION bar fills.
-  * Detection full = caught (see CAUGHT_PENALTY_MODE). Progress full = you win.
-  * Watch the Watcher's eyelids: they twitch (the "tell") just before the eyes open.
-    Near the very end of the round some tells are FAKES (the eyes do not open).
+  * Opening your eyes while the manager is NOT looking fills REVIEW READ.
+  * If your eyes are open while the manager is looking up, SUSPICION fills.
+  * Suspicion full = busted (see CAUGHT_PENALTY_MODE). Review fully read = you win.
+  * Watch the manager: their head lifts and their glasses flash red (the "tell") just before
+    they look up. Near the very end of the round some tells are FAKES (they do not look up).
 
 Keyboard fallback (no camera): hold SPACE to keep your eyes "open". C = recalibrate.
 
-Two-player ready: every per-player value lives in a PlayerSlot, and the Watcher is shared.
+Artwork: everything is drawn with code by default. To use your own art, drop PNG files into
+game/games/assets/watcher_peek/ using the names in ASSET_FILES below. Any missing file simply
+falls back to the drawn version, so you can replace pieces one at a time.
+
+Two-player ready: every per-player value lives in a PlayerSlot, and the Manager is shared.
 Create it with num_players=2 (faces are assigned to players left-to-right on screen).
 """
 
 from __future__ import annotations
 
 import math
+import os
 import random
 from dataclasses import dataclass, field
 from statistics import median
@@ -53,26 +61,31 @@ OPEN_DEBOUNCE = 0.09            # eyes must look open this long to count (filter
 # Closing is never debounced, and a lost face counts as closed, so tracking glitches never hurt you.
 
 # Detection (same feel as the spotlight game)
-EXPOSURE_UP_TIME = 0.22         # seconds open under the Watcher's gaze before you're caught
+EXPOSURE_UP_TIME = 0.22         # seconds open under the manager's gaze before you're caught
 EXPOSURE_DOWN_TIME = 0.6        # seconds to cool down when safe
 CAUGHT_STUN_SECONDS = 1.0       # after a partial-penalty catch: no gain and no detection
 
-# The Watcher: durations are (easy, hard) pairs, blended as the round goes on.
-INITIAL_SAFE_SECONDS = 2.0      # first safe window, so you can start peeking straight away
-SAFE_MIN = (2.2, 1.2)           # eyes-closed window, shortest
-SAFE_MAX = (3.0, 1.8)           # eyes-closed window, longest
-TELL_SECONDS = (0.9, 0.6)       # warning before the eyes open
-OPEN_MIN = (0.9, 1.0)           # eyes-open (danger) window, shortest
-OPEN_MAX = (1.3, 1.5)           # eyes-open (danger) window, longest
+# The manager: durations are (easy, hard) pairs, blended as the round goes on.
+INITIAL_SAFE_SECONDS = 2.0      # first safe window, so you can start reading straight away
+SAFE_MIN = (2.2, 1.2)           # eyes-down window, shortest
+SAFE_MAX = (3.0, 1.8)           # eyes-down window, longest
+TELL_SECONDS = (0.9, 0.6)       # warning before they look up
+OPEN_MIN = (0.9, 1.0)           # looking-up (danger) window, shortest
+OPEN_MAX = (1.3, 1.5)           # looking-up (danger) window, longest
 FAKE_TELL_START = 0.8           # fake tells only appear after this fraction of the round
 FAKE_TELL_CHANCE = 0.5          # chance that a tell is fake once they are allowed
-LID_SPEED = 9.0                 # how fast the Watcher's eyelids animate (visual only)
+LID_SPEED = 9.0                 # how fast the manager's eyes animate (visual only)
 
-# Look
+# Look (computer-drawn defaults; every picture can be replaced by a PNG, see ASSET_FILES)
 BG = (12, 14, 26)
 FLOOR = (28, 30, 46)
 SILHOUETTE = (36, 40, 62)
 SILHOUETTE_EDGE = (60, 66, 96)
+DESK = (32, 35, 54)
+SCREEN_GLOW = (44, 66, 100)
+TIE = (150, 50, 60)
+PAPER = (46, 50, 74)
+PAPER_UNREAD = (60, 66, 96)
 GAZE = (255, 248, 200)
 DANGER = (230, 60, 60)
 WARNING = (255, 90, 90)
@@ -81,28 +94,91 @@ TEXT = (240, 240, 240)
 DIM_ALPHA = 110                 # screen darkness while your own eyes are closed (single player)
 DIM_SPEED = 600.0               # alpha units per second for the dim fade
 
+# Text shown to the player
+PROGRESS_LABEL = "REVIEW READ"
+DETECTION_LABEL = "SUSPICION"
+REVIEW_TITLE = "PERFORMANCE REVIEW"
+REVIEW_RATING = "MEETS EXPECTATIONS"    # revealed when the whole review has been read
+READY_TEXT = "EYES OPEN... CAREFULLY"
+WIN_TEXT = "YOU READ IT ALL!"
+LOSE_TEXT = "BUSTED!"
+CAUGHT_TEXT = "BUSTED!"
+
+# Review page layout (drawn version)
+DOC_SIZE = (190, 250)
+DOC_TOP = 125
+REVIEW_LINE_WIDTHS = (0.9, 0.75, 0.85, 0.6, 0.8, 0.7, 0.5)   # relative length of each text line
+
+# Sprite sizes and positions (used for both the drawn art and PNG replacements)
+MANAGER_CENTER_Y = 230
+MANAGER_SPRITE_SIZE = (300, 300)
+DESK_CENTER_Y = 350
+DESK_SPRITE_SIZE = (420, 110)
+PLAYER_SPRITE_SIZE = (70, 100)
+
+# Optional PNG replacements: key -> file name inside ASSET_DIR. Missing files fall back to drawing.
+ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "watcher_peek")
+ASSET_FILES = {
+    "background": "background.png",          # whole screen (replaces wall + floor)
+    "manager_closed": "manager_closed.png",  # eyes down on screen (safe)
+    "manager_tell": "manager_tell.png",      # head lifting, glasses flashing (warning)
+    "manager_open": "manager_open.png",      # looking up at you (danger)
+    "desk": "desk.png",                      # desk in front of the manager (drawn over their body)
+    "review_page": "review_page.png",        # the review; unread part is darkened as you read
+    "player_open": "player_open.png",        # you, eyes open
+    "player_closed": "player_closed.png",    # you, eyes closed
+    "player_caught": "player_caught.png",    # you, busted (optional; falls back to player_closed)
+}
+
 
 def _lerp(pair: tuple[float, float], t: float) -> float:
     """Blend an (easy, hard) pair by t in 0..1."""
     return pair[0] + (pair[1] - pair[0]) * max(0.0, min(1.0, t))
 
 
-class Watcher:
-    """The on-screen character. Shared by all players. Cycles: closed -> tell -> open -> closed."""
+class Assets:
+    """Loads optional PNG replacements once and hands them out already scaled. Missing = None."""
+
+    def __init__(self, folder: str = ASSET_DIR) -> None:
+        self.folder = folder
+        self._cache: dict[tuple, pygame.Surface | None] = {}
+
+    def get(self, key: str, size: tuple[int, int]) -> pygame.Surface | None:
+        cache_key = (key, size)
+        if cache_key not in self._cache:
+            self._cache[cache_key] = self._load(key, size)
+        return self._cache[cache_key]
+
+    def _load(self, key: str, size: tuple[int, int]) -> pygame.Surface | None:
+        if key not in ASSET_FILES:
+            return None
+        path = os.path.join(self.folder, ASSET_FILES[key])
+        if not os.path.isfile(path):
+            return None
+        try:
+            image = pygame.image.load(path).convert_alpha()
+            return pygame.transform.smoothscale(image, size)
+        except Exception as exc:        # a broken PNG must never crash the game
+            print(f"Could not load {path}: {exc!r} - using drawn version")
+            return None
+
+
+class Manager:
+    """The on-screen line manager. Shared by all players. Cycles: closed -> tell -> open -> closed."""
 
     def __init__(self) -> None:
         self.reset()
 
     def reset(self) -> None:
-        self.phase = "closed"       # "closed" (safe), "tell" (warning), "open" (danger)
+        self.phase = "closed"       # "closed" (eyes down, safe), "tell" (warning), "open" (looking up, danger)
         self.timer = 0.0
         self.duration = INITIAL_SAFE_SECONDS
-        self.fake = False           # True while a tell will NOT lead to open eyes
-        self.lid = 0.0              # 0 = shut, 1 = wide (visual lid position, eased)
+        self.fake = False           # True while a tell will NOT lead to them looking up
+        self.lid = 0.0              # 0 = shut, 1 = wide (visual eye position, eased)
 
     @property
     def dangerous(self) -> bool:
-        """True only while the Watcher's eyes are really open."""
+        """True only while the manager is really looking up."""
         return self.phase == "open"
 
     @property
@@ -125,7 +201,7 @@ class Watcher:
             self.duration = _lerp(TELL_SECONDS, progress)
             self.fake = progress >= FAKE_TELL_START and random.random() < FAKE_TELL_CHANCE
         elif self.phase == "tell":
-            if self.fake:           # the lids twitched but the eyes stay shut
+            if self.fake:           # the head twitched but they keep looking at their screen
                 self.fake = False
                 self._begin_closed(progress)
             else:
@@ -194,9 +270,9 @@ class PlayerSlot:
 
 
 class WatcherPeek(CalibratedMinigame):
-    """Peek while the Watcher's eyes are shut, close them before it looks. Fill progress to win."""
+    """Read your review while the manager's eyes are down, close your eyes before they look up."""
 
-    title = "Peek Past the Watcher"
+    title = "Sneak a Look"
     tracker_cls = EyeTracker
     calibrate_timeout = CALIBRATE_TIMEOUT
     after_calibration = "calibrate_closed"   # our second calibration stage, then "ready", then "play"
@@ -219,17 +295,19 @@ class WatcherPeek(CalibratedMinigame):
         # One slot per player. Keys: P1 = Space, P2 = Enter (keyboard fallback only).
         keys = [pygame.K_SPACE, pygame.K_RETURN]
         self.slots = [PlayerSlot(i, keys[i]) for i in range(num_players)]
-        self.watcher = Watcher()
+        self.manager = Manager()
+        self.assets = Assets(ASSET_DIR)
         self._dim_alpha = 0.0
         self._dim_surface: pygame.Surface | None = None
         self._overlay: pygame.Surface | None = None
+        self._mask: pygame.Surface | None = None
         self.start()
 
     # Public API
     @property
     def actions(self) -> tuple[Action, Action]:
         return (
-            Action("Eyes Open", "Open your eyes to fill progress (or hold SPACE)", self.open_eyes),
+            Action("Eyes Open", "Open your eyes to read the review (or hold SPACE)", self.open_eyes),
             Action("Eyes Closed", "Close your eyes to stay hidden (or release SPACE)", self.close_eyes),
         )
 
@@ -243,7 +321,7 @@ class WatcherPeek(CalibratedMinigame):
         self.message = ""
         self.message_time = 0.0
         self._dim_alpha = 0.0
-        self.watcher.reset()
+        self.manager.reset()
         for slot in self.slots:
             slot.reset_round()
 
@@ -342,7 +420,7 @@ class WatcherPeek(CalibratedMinigame):
 
         self.elapsed += dt
         round_progress = min(1.0, self.elapsed / ROUND_SECONDS)
-        self.watcher.update(dt, round_progress)
+        self.manager.update(dt, round_progress)
 
         for slot in self.slots:
             self._read_slot_eyes(slot, dt)
@@ -363,14 +441,14 @@ class WatcherPeek(CalibratedMinigame):
         eyes_open = slot.eyes_open
         stunned = slot.stun > 0.0
 
-        # Detection: eyes open while the Watcher's eyes are open.
-        if eyes_open and self.watcher.dangerous and not stunned:
+        # Detection: eyes open while the manager is looking up.
+        if eyes_open and self.manager.dangerous and not stunned:
             slot.exposure = min(1.0, slot.exposure + dt / EXPOSURE_UP_TIME)
         else:
             slot.exposure = max(0.0, slot.exposure - dt / EXPOSURE_DOWN_TIME)
 
         # Progress: fills on safe peeks, optionally drains while eyes are closed.
-        if eyes_open and not self.watcher.dangerous and not stunned:
+        if eyes_open and not self.manager.dangerous and not stunned:
             slot.progress = min(1.0, slot.progress + dt / PROGRESS_FILL_SECONDS)
         elif not eyes_open and self.decay_enabled:
             slot.progress = max(0.0, slot.progress - dt / PROGRESS_DECAY_SECONDS)
@@ -381,12 +459,12 @@ class WatcherPeek(CalibratedMinigame):
         fraction = CAUGHT_PENALTY_FRACTIONS[self.penalty_mode]
         if fraction >= 1.0:
             slot.alive = False           # full loss: this player is out
-            self._flash("SEEN!", 1.5)
+            self._flash(CAUGHT_TEXT, 1.5)
             return
         slot.progress *= (1.0 - fraction)  # partial loss: keep playing
         slot.exposure = 0.0
         slot.stun = CAUGHT_STUN_SECONDS
-        self._flash(f"SEEN! -{int(fraction * 100)}% progress", 1.5)
+        self._flash(f"{CAUGHT_TEXT} -{int(fraction * 100)}% progress", 1.5)
 
     def _check_end(self) -> None:
         # Highest progress wins if several fill on the same frame (only matters in 2P).
@@ -401,31 +479,43 @@ class WatcherPeek(CalibratedMinigame):
         self.message, self.message_time = text, seconds
 
     # Draw the scene
+    def _blit_asset(self, screen: pygame.Surface, keys, center: tuple[int, int],
+                    size: tuple[int, int]) -> bool:
+        """Draw the first available PNG from `keys` (a name or list of names) centred on `center`."""
+        for key in ([keys] if isinstance(keys, str) else keys):
+            sprite = self.assets.get(key, size)
+            if sprite is not None:
+                screen.blit(sprite, (center[0] - size[0] // 2, center[1] - size[1] // 2))
+                return True
+        return False
+
     def draw(self, screen: pygame.Surface) -> None:
         w, h = screen.get_size()
         ground_y = h - 110
-        screen.fill(BG)
-        pygame.draw.rect(screen, FLOOR, (0, ground_y + 40, w, h - ground_y - 40))
+        if not self._blit_asset(screen, "background", (w // 2, h // 2), (w, h)):
+            screen.fill(BG)
+            pygame.draw.rect(screen, FLOOR, (0, ground_y + 40, w, h - ground_y - 40))
+
+        self._draw_manager(screen, w)
+        self._draw_desk(screen, w)
 
         if self._overlay is None or self._overlay.get_size() != (w, h):
             self._overlay = pygame.Surface((w, h), pygame.SRCALPHA)
         overlay = self._overlay
         overlay.fill((0, 0, 0, 0))
-
-        playing = self.mode == "play"
-        if playing and self.watcher.dangerous:
+        if self.mode == "play" and self.manager.dangerous:
             self._draw_gaze(overlay, w, ground_y)
         screen.blit(overlay, (0, 0))
 
-        self._draw_watcher(screen, w)
         for slot in self.slots:
+            self._draw_review(screen, slot, w)
             self._draw_player(screen, slot, ground_y, w)
 
         self._draw_dim(screen, w, h)     # dark screen while your eyes are closed
         self._draw_hud(screen, w, h)
 
     def _draw_gaze(self, overlay: pygame.Surface, w: int, ground_y: int) -> None:
-        """Red wash plus two light cones from the Watcher's eyes down to the floor."""
+        """Red wash plus two light cones from the manager's glasses down to the floor."""
         pulse = 18 * math.sin(self.elapsed * 12)
         overlay.fill((255, 40, 40, int(34 + pulse)))
         cx, ey = w // 2, 185
@@ -435,32 +525,112 @@ class WatcherPeek(CalibratedMinigame):
                 (ex - 8, ey), (ex + 8, ey),
                 (ex + side * 170 + 90, ground_y + 55), (ex + side * 170 - 90, ground_y + 55)])
 
-    def _draw_watcher(self, screen: pygame.Surface, w: int) -> None:
+    def _draw_manager(self, screen: pygame.Surface, w: int) -> None:
         cx = w // 2
-        wt = self.watcher
-        # Body and head silhouette.
-        pygame.draw.polygon(screen, SILHOUETTE, [(cx - 120, 340), (cx - 70, 270), (cx + 70, 270), (cx + 120, 340)])
-        pygame.draw.ellipse(screen, SILHOUETTE, (cx - 75, 105, 150, 170))
-        pygame.draw.ellipse(screen, SILHOUETTE_EDGE, (cx - 75, 105, 150, 170), 3)
+        mgr = self.manager
+        keys = {"closed": "manager_closed", "tell": "manager_tell", "open": "manager_open"}
+        if self._blit_asset(screen, keys[mgr.phase], (cx, MANAGER_CENTER_Y), MANAGER_SPRITE_SIZE):
+            return
+
+        lift = -int(8 * mgr.tell_amount)            # head rises as the tell builds
+        # Shoulders, tie and head.
+        pygame.draw.polygon(screen, SILHOUETTE, [(cx - 120, 345), (cx - 70, 270), (cx + 70, 270), (cx + 120, 345)])
+        pygame.draw.polygon(screen, TIE, [(cx - 8, 274), (cx + 8, 274), (cx + 12, 330), (cx, 345), (cx - 12, 330)])
+        pygame.draw.ellipse(screen, SILHOUETTE, (cx - 75, 105 + lift, 150, 170))
+        pygame.draw.ellipse(screen, SILHOUETTE_EDGE, (cx - 75, 105 + lift, 150, 170), 3)
 
         for side in (-1, 1):
-            ex, ey = cx + side * 30, 185
-            if wt.phase == "open":
-                eye_h = max(4, int(24 * wt.lid))
+            ex, ey = cx + side * 30, 185 + lift
+            lens = (ex - 24, ey - 18, 48, 36)
+            frame = SILHOUETTE_EDGE
+            if mgr.phase == "tell" and int(mgr.timer * 12) % 2 == 0:
+                frame = WARNING                     # glasses flash: real and fake tells look identical
+            if mgr.phase == "open":
+                eye_h = max(4, int(24 * mgr.lid))
                 pygame.draw.ellipse(screen, GAZE, (ex - 17, ey - eye_h // 2, 34, eye_h))
                 if eye_h > 10:
                     pygame.draw.circle(screen, BG, (ex, ey), 5)
-            elif wt.phase == "tell":
-                # Lids twitch: alternate a thin red slit and a shut lid. Real and fake tells look identical.
-                if int(wt.timer * 12) % 2 == 0:
-                    pygame.draw.ellipse(screen, WARNING, (ex - 17, ey - 3, 34, 6))
-                else:
-                    pygame.draw.line(screen, SILHOUETTE_EDGE, (ex - 17, ey), (ex + 17, ey), 4)
+                frame = GAZE
             else:
-                pygame.draw.line(screen, SILHOUETTE_EDGE, (ex - 17, ey), (ex + 17, ey), 4)
+                pygame.draw.line(screen, SILHOUETTE_EDGE, (ex - 17, ey + 4), (ex + 17, ey + 4), 4)  # eyes down
+            pygame.draw.rect(screen, frame, lens, 3, border_radius=10)
+        pygame.draw.line(screen, SILHOUETTE_EDGE, (cx - 6, 185 + lift), (cx + 6, 185 + lift), 3)  # glasses bridge
+
+    def _draw_desk(self, screen: pygame.Surface, w: int) -> None:
+        """The desk in front of the manager, with a monitor, mug and your review folder on it."""
+        cx = w // 2
+        if self._blit_asset(screen, "desk", (cx, DESK_CENTER_Y), DESK_SPRITE_SIZE):
+            return
+        pygame.draw.rect(screen, DESK, (cx - 170, 352, 340, 40))                    # front panel
+        pygame.draw.rect(screen, DESK, (cx - 190, 332, 380, 22), border_radius=4)    # desk top
+        pygame.draw.rect(screen, SILHOUETTE_EDGE, (cx - 190, 332, 380, 22), 2, border_radius=4)
+        pygame.draw.rect(screen, SILHOUETTE_EDGE, (cx + 88, 284, 74, 48), border_radius=4)   # monitor
+        pygame.draw.rect(screen, SCREEN_GLOW, (cx + 93, 289, 64, 36), border_radius=2)
+        pygame.draw.rect(screen, PAPER_UNREAD, (cx - 62, 322, 54, 10), border_radius=2)      # your review folder
+        pygame.draw.rect(screen, SILHOUETTE_EDGE, (cx - 168, 314, 18, 18), border_radius=3)  # mug
+        pygame.draw.arc(screen, SILHOUETTE_EDGE, (cx - 154, 317, 12, 11), -math.pi / 2, math.pi / 2, 2)
+        pygame.draw.rect(screen, SILHOUETTE_EDGE, (cx - 30, 362, 60, 14), 2, border_radius=2)  # nameplate
+
+    def _doc_rect(self, slot: PlayerSlot, w: int) -> tuple[int, int, int, int]:
+        """Where this player's magnified review page sits (left for P1, right for P2)."""
+        dw, dh = DOC_SIZE
+        count = len(self.slots)
+        x = 40 if count == 1 else 30 + int((w - dw - 60) * slot.index / (count - 1))
+        return x, DOC_TOP, dw, dh
+
+    def _draw_review(self, screen: pygame.Surface, slot: PlayerSlot, w: int) -> None:
+        """The review page you are sneaking a look at. Lines light up as progress fills."""
+        x, y, dw, dh = self._doc_rect(slot, w)
+        rect = (x, y, dw, dh)
+        has_art = self._blit_asset(screen, "review_page", (x + dw // 2, y + dh // 2), (dw, dh))
+
+        if has_art:
+            self._draw_unread_mask(screen, rect, slot.progress)
+        else:
+            pygame.draw.rect(screen, PAPER, rect, border_radius=6)
+            draw_text_centered(screen, self.small_font, REVIEW_TITLE, TEXT, (x + dw // 2, y + 18))
+            top, count = y + 42, len(REVIEW_LINE_WIDTHS)
+            for i, width in enumerate(REVIEW_LINE_WIDTHS):
+                ly = top + i * 22
+                full = int((dw - 28) * width)
+                read = max(0.0, min(1.0, slot.progress * count - i))   # how much of this line is read
+                pygame.draw.rect(screen, PAPER_UNREAD, (x + 14, ly, full, 8), border_radius=3)
+                if read > 0:
+                    pygame.draw.rect(screen, GAZE, (x + 14, ly, int(full * read), 8), border_radius=3)
+            done = slot.progress >= 1.0
+            draw_text_centered(screen, self.small_font, "RATING:", (200, 200, 200), (x + dw // 2, y + dh - 52))
+            draw_text_centered(screen, self.small_font, REVIEW_RATING if done else "???",
+                               GAZE if done else WARNING, (x + dw // 2, y + dh - 30))
+
+        # Frame colour tells you at a glance whether this is a safe moment to read.
+        edge = SILHOUETTE_EDGE
+        if slot.eyes_open and slot.alive:
+            edge = DANGER if self.manager.dangerous else SAFE_GREEN
+        pygame.draw.rect(screen, edge, rect, 3, border_radius=6)
+        if len(self.slots) > 1:
+            draw_text_centered(screen, self.small_font, f"P{slot.index + 1}", (200, 200, 200),
+                               (x + dw // 2, y + dh + 14))
+
+    def _draw_unread_mask(self, screen: pygame.Surface, rect: tuple[int, int, int, int], progress: float) -> None:
+        """For PNG review pages: darken the part of the page that has not been read yet."""
+        x, y, dw, dh = rect
+        read_h = int(dh * max(0.0, min(1.0, progress)))
+        if read_h >= dh:
+            return
+        if self._mask is None or self._mask.get_size() != (dw, dh):
+            self._mask = pygame.Surface((dw, dh), pygame.SRCALPHA)
+            self._mask.fill((0, 0, 0, 170))
+        screen.blit(self._mask, (x, y + read_h), (0, 0, dw, dh - read_h))
 
     def _draw_player(self, screen: pygame.Surface, slot: PlayerSlot, ground_y: int, w: int) -> None:
         px = int(w * (slot.index + 1) / (len(self.slots) + 1))
+        if not slot.alive:
+            keys = ["player_caught", "player_closed"]
+        else:
+            keys = ["player_open" if slot.eyes_open else "player_closed"]
+        if self._blit_asset(screen, keys, (px, ground_y - 10), PLAYER_SPRITE_SIZE):
+            return
+
         e = slot.exposure
         color = (80 + int(175 * e), 200 - int(130 * e), 120 - int(80 * e))
         if not slot.alive:
@@ -502,9 +672,9 @@ class WatcherPeek(CalibratedMinigame):
 
         for slot in self.slots:
             cx = int(w * (slot.index + 1) / (len(self.slots) + 1))
-            label = "PROGRESS" if len(self.slots) == 1 else f"P{slot.index + 1} PROGRESS"
+            label = PROGRESS_LABEL if len(self.slots) == 1 else f"P{slot.index + 1} {PROGRESS_LABEL}"
             self._draw_meter(screen, cx, 14, slot.progress, SAFE_GREEN, label)
-            self._draw_meter(screen, cx, 58, slot.exposure, DANGER, "DETECTION")
+            self._draw_meter(screen, cx, 58, slot.exposure, DANGER, DETECTION_LABEL)
 
         draw_camera_preview(screen, self.tracker)
 
@@ -521,13 +691,13 @@ class WatcherPeek(CalibratedMinigame):
         elif self.mode == "calibrate_closed":
             self._draw_closed_calibration(screen, w, h)
         elif self.mode == "ready":
-            draw_text_centered(screen, self.big_font, "OPEN YOUR EYES!", SAFE_GREEN, (w // 2, h // 2))
+            draw_text_centered(screen, self.big_font, READY_TEXT, SAFE_GREEN, (w // 2, h // 2))
         elif self.tracker.available and any(not s.face_visible for s in self.slots if s.alive):
             draw_text_centered(screen, self.font, "Face lost! (counts as eyes closed)", (255, 160, 60),
                                (w // 2, h // 2 + 40))
 
         if self.result is not None:
-            msg, col = ("YOU PEEKED IT ALL!", SAFE_GREEN) if self.result else ("SEEN!", DANGER)
+            msg, col = (WIN_TEXT, SAFE_GREEN) if self.result else (LOSE_TEXT, DANGER)
             draw_text_centered(screen, self.big_font, msg, col, (w // 2, h // 2 + 80))
         elif self.message_time > 0:
             draw_text_centered(screen, self.font, self.message, WARNING, (w // 2, h // 2 + 80))
