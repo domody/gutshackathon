@@ -29,7 +29,6 @@ from game.ui import draw_bar, draw_camera_preview, draw_status_line, draw_text_c
 
 DURATION = 16.0              # seconds to carry the coffee
 READY_SECONDS = 1.5
-SIM_SECONDS = 0.45           # keyboard fallback: how long a key press "holds" a tilt
 
 # Hand wobble (the hand drifts and gets jolted; tilt your head to correct it)
 HEAD_GAIN = 1.6              # hand degrees per head degree
@@ -40,9 +39,6 @@ JOLT_EVERY = (2.5, 4.0)
 JOLT_SIZE = (6.0, 10.0)
 SPILL_RATE = 0.18            # coffee lost per second just past the edge
 SPILL_SPEED_UP = 0.5         # extra spill per unit of overshoot
-
-# keyboard fallback: pose -> head roll degrees
-SIM_POSES = {"tilt_left": -14.0, "tilt_right": 14.0}
 
 BG = (28, 22, 30)
 FLOOR = (44, 34, 40)
@@ -79,8 +75,8 @@ class CoffeeRun(FaceMinigame):
     @property
     def actions(self) -> tuple[Action, Action]:
         return (
-            Action("Tilt Left", "Tilt your head left to correct the cup (or A / Q)", self.tilt_left),
-            Action("Tilt Right", "Tilt your head right to correct the cup (or D / E)", self.tilt_right),
+            Action("Tilt Left", "Tilt your head left to correct the cup"),
+            Action("Tilt Right", "Tilt your head right to correct the cup"),
         )
 
     def start(self) -> None:
@@ -92,8 +88,6 @@ class CoffeeRun(FaceMinigame):
 
         self.you_roll = 0.0     # head tilt (target)
         self.vis_roll = 0.0     # head tilt (smoothed)
-        self.sim_pose: str | None = None
-        self.sim_time = 0.0
 
         self.lean_roll = 0.0    # resulting hand lean
         self.lean_yaw = 0.0
@@ -103,25 +97,6 @@ class CoffeeRun(FaceMinigame):
         self.jolt_t = random.uniform(*JOLT_EVERY)
         self.drops: list[list[float]] = []   # x, y, vx, vy, life
         self.drop_acc = 0.0
-
-    # Handle input
-    def tilt_left(self) -> None:
-        self._sim("tilt_left")
-
-    def tilt_right(self) -> None:
-        self._sim("tilt_right")
-
-    def _sim(self, pose: str) -> None:
-        self.sim_pose, self.sim_time = pose, SIM_SECONDS
-
-    def handle_event(self, event: pygame.event.Event) -> None:
-        super().handle_event(event)
-        if event.type != pygame.KEYDOWN:
-            return
-        if event.key in (pygame.K_a, pygame.K_LEFT, pygame.K_q):
-            self._sim("tilt_left")
-        elif event.key in (pygame.K_d, pygame.K_RIGHT, pygame.K_e):
-            self._sim("tilt_right")
 
     # Update state
     def update(self, dt: float) -> None:
@@ -135,7 +110,7 @@ class CoffeeRun(FaceMinigame):
             self.update_calibration(dt)
             return
 
-        self._read_pose(dt)
+        self._read_pose()
         if self.mode == "ready":
             self.lean_roll = self.vis_roll * HEAD_GAIN
             self.ready_t += dt
@@ -152,12 +127,7 @@ class CoffeeRun(FaceMinigame):
         elif self.elapsed >= DURATION:
             self.finish(True)
 
-    def _read_pose(self, dt: float) -> None:
-        if self.sim_time > 0 and self.sim_pose:        # keyboard fallback
-            self.sim_time -= dt
-            self.you_roll = SIM_POSES[self.sim_pose]
-            return
-
+    def _read_pose(self) -> None:
         offsets = self.read_offsets()
         if offsets is None:
             self.you_roll *= 0.9
@@ -365,9 +335,9 @@ class CoffeeRun(FaceMinigame):
         draw_camera_preview(screen, self.tracker)
 
         if self.tracker.available:
-            info = f"Pose tracking: {self.tracker.backend}   (C = recentre)"
+            info = f"Pose tracking: {self.tracker.backend}"
         else:
-            info = "No camera tracking - keyboard: A/D or Q/E tilt"
+            info = "Camera tracking unavailable"
         draw_status_line(screen, self.small_font, info)
 
         self.draw_face_lost(screen, 40)

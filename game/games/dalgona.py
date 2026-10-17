@@ -48,15 +48,9 @@ class Dalgona(Minigame):
     @property
     def actions(self) -> tuple[Action, Action]:
         return (
-            Action("Move Pen", "Move your index finger along the signature guide", self.move_hand),
-            Action("Sign", "Pinch thumb and index to put pen to paper", self.pinch),
+            Action("Move Pen", "Move your index finger along the signature guide"),
+            Action("Sign", "Pinch thumb and index to put pen to paper"),
         )
-
-    def move_hand(self) -> None:
-        pass
-
-    def pinch(self) -> None:
-        pass
 
     def start(self) -> None:
         super().start()
@@ -78,7 +72,6 @@ class Dalgona(Minigame):
         self.samples: list[tuple[float, float]] = []
         self.covered: list[bool] = []
         self.strokes: list[list[tuple[float, float, bool]]] = []
-        self._keys_pinch = False
         self.retry_count = 0
         self.retry_stage = "name"
         self.status = "Pinch and trace WM"
@@ -89,12 +82,6 @@ class Dalgona(Minigame):
         paper_top = max(138, int(height * 0.1))
         paper_height = min(540, height - paper_top - 38)
         return pygame.Rect(width // 2 - paper_width // 2, paper_top, paper_width, paper_height)
-
-    def handle_event(self, event: pygame.event.Event) -> None:
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-            self._keys_pinch = True
-        elif event.type == pygame.KEYUP and event.key == pygame.K_SPACE:
-            self._keys_pinch = False
 
     def _begin_page(self, index: int) -> None:
         self.page_index = index
@@ -142,7 +129,8 @@ class Dalgona(Minigame):
             if hand is None:
                 return self.pointer, False
             return (hand[0] * width, hand[1] * height), hand[2]
-        return pygame.mouse.get_pos(), self._keys_pinch or pygame.mouse.get_pressed()[0]
+        self.hand_lost = True
+        return pygame.mouse.get_pos(), pygame.mouse.get_pressed()[0]
 
     def update(self, dt: float) -> None:
         if self.finished:
