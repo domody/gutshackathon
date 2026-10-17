@@ -27,8 +27,6 @@ TILT_THRESH = 14.0           # degrees
 
 READY_SECONDS = 1.0
 FLASH_SECONDS = 0.35
-SIM_SECONDS = 0.45           # keyboard fallback: how long a key press "holds" a pose
-
 # pose id -> (label, avatar yaw -1..1, avatar roll degrees)
 POSES = {
     "left": ("TURN LEFT", -1.0, 0.0),
@@ -80,10 +78,8 @@ class simonsays(FaceMinigame):
     @property
     def actions(self) -> tuple[Action, Action]:
         return (
-            Action("Turn Head", "Turn your head left or right to match the pose (or A / D)",
-                   self.turn_head),
-            Action("Tilt Head", "Tilt your head left or right to match the pose (or Q / E)",
-                   self.tilt_head),
+            Action("Turn Head", "Turn your head left or right to match the pose"),
+            Action("Tilt Head", "Tilt your head left or right to match the pose"),
         )
 
     def start(self) -> None:
@@ -95,8 +91,6 @@ class simonsays(FaceMinigame):
         self.current: str | None = None      # pose the player is doing right now
         self.you_yaw = self.you_roll = 0.0   # live avatar target
         self.vis_yaw = self.vis_roll = 0.0   # avatar as drawn (smoothed)
-        self.sim_pose: str | None = None
-        self.sim_time = 0.0
 
         self.flash_t = 0.0
         self.flash_word = FLASH_WORDS[0]
@@ -106,29 +100,6 @@ class simonsays(FaceMinigame):
         self.hold = 0.0
         self.time_left = self.time_limit = 1.0
         self._new_command()
-
-    # Handle input
-    def turn_head(self) -> None:
-        self._sim("right" if self.sim_pose == "left" else "left")
-
-    def tilt_head(self) -> None:
-        self._sim("tilt_right" if self.sim_pose == "tilt_left" else "tilt_left")
-
-    def _sim(self, pose: str) -> None:
-        self.sim_pose, self.sim_time = pose, SIM_SECONDS
-
-    def handle_event(self, event: pygame.event.Event) -> None:
-        super().handle_event(event)
-        if event.type != pygame.KEYDOWN:
-            return
-        if event.key in (pygame.K_a, pygame.K_LEFT):
-            self._sim("left")
-        elif event.key in (pygame.K_d, pygame.K_RIGHT):
-            self._sim("right")
-        elif event.key == pygame.K_q:
-            self._sim("tilt_left")
-        elif event.key == pygame.K_e:
-            self._sim("tilt_right")
 
     # Command selection
     def _pose_pool(self) -> tuple[str, ...]:
@@ -175,7 +146,7 @@ class simonsays(FaceMinigame):
             self.update_calibration(dt)
             return
 
-        self._read_pose(dt)
+        self._read_pose()
         if self.mode == "ready":
             self.ready_t += dt
             if self.ready_t >= READY_SECONDS:
@@ -185,13 +156,7 @@ class simonsays(FaceMinigame):
         self.elapsed += dt
         self._check_pose(dt)
 
-    def _read_pose(self, dt: float) -> None:
-        if self.sim_time > 0 and self.sim_pose:        # keyboard fallback
-            self.sim_time -= dt
-            _, self.you_yaw, self.you_roll = POSES[self.sim_pose]
-            self.current = self.sim_pose
-            return
-
+    def _read_pose(self) -> None:
         offsets = self.read_offsets()
         if offsets is None:
             self.current = None
@@ -321,9 +286,9 @@ class simonsays(FaceMinigame):
         draw_camera_preview(screen, self.tracker)
 
         if self.tracker.available:
-            info = f"Pose tracking: {self.tracker.backend}   (C = recentre)"
+            info = f"Pose tracking: {self.tracker.backend}"
         else:
-            info = "No camera tracking - keyboard: A/D turn, Q/E tilt"
+            info = "Camera tracking unavailable"
         draw_status_line(screen, self.small_font, info)
 
         tags = [label.upper() for attr, label, _ in CHALLENGES if getattr(self, attr)]

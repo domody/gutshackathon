@@ -52,10 +52,7 @@ class MinigameIntro(Screen):
     def handle_event(self, event: pygame.event.Event) -> None:
         if not self._writer.done:
             return
-        if event.type == pygame.KEYDOWN and event.key in (
-            pygame.K_RETURN,
-            pygame.K_SPACE,
-        ):
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
             self.on_okay()
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self._button_rect.collidepoint(event.pos):

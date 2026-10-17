@@ -18,7 +18,6 @@ BAD_CHANCE = 0.4               # after the first two objects; never more than 2 
 PALM_HOLD = 0.05               # palm must be shown this long inside the zone to catch
 FIST_HOLD = 0.05               # fist must be shown this long inside the zone to drop a bad item
 READY_SECONDS = 3.5
-SIM_SECONDS = 0.5              # keyboard fallback: how long a key press "holds" a pose
 FLASH_SECONDS = 0.7
 OBJ_R = 34
 
@@ -74,9 +73,8 @@ class CatchOrDrop(Minigame):
     @property
     def actions(self) -> tuple[Action, Action]:
         return (
-            Action("Open Palm", "Show an open palm to catch good paperwork (or O / Up)",
-                   self.open_palm),
-            Action("Fist", "Make a fist to let a P45 fall (or F / Down)", self.make_fist),
+            Action("Open Palm", "Show an open palm to catch good paperwork"),
+            Action("Fist", "Make a fist to let a P45 fall"),
         )
 
     def start(self) -> None:
@@ -92,29 +90,12 @@ class CatchOrDrop(Minigame):
         self.particles: list[list] = []
 
         self.hand: str | None = None
-        self.sim_pose: str | None = None
-        self.sim_time = 0.0
 
         self.mode = "ready"
         self.ready_t = 0.0
         self.flash_t = 0.0
         self.flash_text = ""
         self.flash_color = GOOD_COLOR
-
-    # ---------------------------------------------------------------- input
-    def open_palm(self) -> None:
-        self.sim_pose, self.sim_time = "palm", SIM_SECONDS
-
-    def make_fist(self) -> None:
-        self.sim_pose, self.sim_time = "fist", SIM_SECONDS
-
-    def handle_event(self, event: pygame.event.Event) -> None:
-        if event.type != pygame.KEYDOWN:
-            return
-        if event.key in (pygame.K_o, pygame.K_UP):
-            self.open_palm()
-        elif event.key in (pygame.K_f, pygame.K_DOWN):
-            self.make_fist()
 
     # ------------------------------------------------------------- geometry
     def _geom(self) -> tuple[int, int, int, int, int]:
@@ -129,7 +110,7 @@ class CatchOrDrop(Minigame):
             return
         dt = min(dt, 0.1)
         self.flash_t = max(0.0, self.flash_t - dt)
-        self._read_hand(dt)
+        self._read_hand()
         self._update_particles(dt)
 
         if self.mode == "ready":
@@ -147,12 +128,8 @@ class CatchOrDrop(Minigame):
         elif self.resolved >= TARGET_OBJECTS:
             self.finish(True)
 
-    def _read_hand(self, dt: float) -> None:
-        if self.sim_time > 0 and self.sim_pose:   # keyboard fallback
-            self.sim_time -= dt
-            self.hand = self.sim_pose
-        else:
-            self.hand = self.tracker.gesture if self.tracker.available else None
+    def _read_hand(self) -> None:
+        self.hand = self.tracker.gesture if self.tracker.available else None
 
     def _spawn(self, dt: float) -> None:
         if self.spawned >= TARGET_OBJECTS:
@@ -371,5 +348,5 @@ class CatchOrDrop(Minigame):
         if self.tracker.available:
             info = f"Hand tracking: {self.tracker.backend}"
         else:
-            info = "No hand tracking - keyboard: O = open palm, F = fist"
+            info = "Hand tracking unavailable"
         draw_status_line(screen, self.small_font, info)

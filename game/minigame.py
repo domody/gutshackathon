@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import pygame
 
@@ -16,7 +16,6 @@ class Action:
 
     name: str
     description: str
-    perform: Callable[[], None]
 
 
 class Minigame(ABC):
@@ -52,9 +51,6 @@ class Minigame(ABC):
         """Reset state when the minigame begins. Subclasses call super().start()."""
         self.finished = False
         self.won = False
-
-    def handle_event(self, event: pygame.event.Event) -> None:
-        pass
 
     def update(self, dt: float) -> None:
         pass

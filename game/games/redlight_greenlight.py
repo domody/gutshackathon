@@ -28,8 +28,6 @@ PUMP_THRESHOLD = 0.9
 DEFAULT_STILL_THRESHOLD = 0.42
 CAUGHT_AFTER = 0.2
 CHAT_SECONDS = 2.5
-KEY_RUN_SECONDS = 0.24
-KEY_MOVE_SECONDS = 0.28
 RESULT_SECONDS = 2.8
 
 NAVY = (13, 35, 57)
@@ -62,8 +60,8 @@ class RedLightGreenLight(CalibratedMinigame):
     @property
     def actions(self) -> tuple[Action, Action]:
         return (
-            Action("Run in Place", "Pump your arms to sprint down the clear hallway", self.run_key),
-            Action("Act Natural", "Stand still to walk casually past colleagues", self.natural_key),
+            Action("Run in Place", "Pump your arms to sprint down the clear hallway"),
+            Action("Act Natural", "Stand still to walk casually past colleagues"),
         )
 
     def start(self) -> None:
@@ -83,28 +81,8 @@ class RedLightGreenLight(CalibratedMinigame):
         self.running_detected = False
         self.body_visible = False
         self.still_threshold = DEFAULT_STILL_THRESHOLD
-        self.key_run = 0.0
-        self.key_motion = 0.0
         self.animation_time = 0.0
         self.status = "Hallway clear - run!"
-
-    def run_key(self) -> None:
-        self.key_run = KEY_RUN_SECONDS
-        self.key_motion = KEY_MOVE_SECONDS
-
-    def natural_key(self) -> None:
-        self.key_run = 0.0
-        self.key_motion = 0.0
-
-    def handle_event(self, event: pygame.event.Event) -> None:
-        super().handle_event(event)
-        if event.type != pygame.KEYDOWN:
-            return
-        run, natural = self.actions
-        if event.key in (pygame.K_a, pygame.K_LEFT):
-            run.perform()
-        elif event.key in (pygame.K_d, pygame.K_RIGHT):
-            natural.perform()
 
     def read_sample(self) -> tuple[float, float] | None:
         body = self.tracker.body if self.tracker.available else None
@@ -129,8 +107,6 @@ class RedLightGreenLight(CalibratedMinigame):
             return
         dt = min(dt, 0.1)
         self.animation_time += dt
-        self.key_run = max(0.0, self.key_run - dt)
-        self.key_motion = max(0.0, self.key_motion - dt)
 
         if self.mode == "calibrate":
             self.update_calibration(dt)
@@ -165,8 +141,8 @@ class RedLightGreenLight(CalibratedMinigame):
         self._update_phase()
 
         camera_running = hands_visible and pump >= PUMP_THRESHOLD
-        running = self.key_run > 0 or camera_running
-        moving = motion > self.still_threshold or self.key_motion > 0
+        running = camera_running
+        moving = motion > self.still_threshold
         can_sprint = self.phase in ("clear", "approaching", "departing")
         self.running_detected = running and can_sprint and self.chat_timer <= 0
 

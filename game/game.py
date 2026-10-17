@@ -89,8 +89,9 @@ class Game:
                 self.quit()
             elif self.ui.active:
                 self.ui.handle_event(event)
-            elif self.minigame:
-                self.minigame.handle_event(event)
+            elif (self.minigame and event.type == pygame.KEYDOWN
+                  and event.key == pygame.K_k):
+                self.minigame.finish(True)
 
     def update(self, dt: float) -> None:
         if self.ui.active:

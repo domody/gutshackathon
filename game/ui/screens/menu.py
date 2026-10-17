@@ -28,11 +28,7 @@ class Menu(Screen):
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.KEYDOWN:
-            if event.key in (pygame.K_UP, pygame.K_w):
-                self._move(-1)
-            elif event.key in (pygame.K_DOWN, pygame.K_s):
-                self._move(1)
-            elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+            if event.key == pygame.K_RETURN:
                 self._activate()
         elif event.type == pygame.MOUSEMOTION:
             if (index := self._index_at(event.pos)) is not None:
@@ -57,9 +53,6 @@ class Menu(Screen):
             surface.blit(text, rect)
             self._item_rects.append(rect)
             y = rect.bottom + self.SPACING
-
-    def _move(self, step: int) -> None:
-        self.selected = (self.selected + step) % len(self.items)
 
     def _activate(self) -> None:
         self.items[self.selected].action()

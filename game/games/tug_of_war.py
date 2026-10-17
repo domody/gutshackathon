@@ -45,8 +45,8 @@ class TugOfWar(CalibratedMinigame):
     @property
     def actions(self) -> tuple[Action, Action]:
         return (
-            Action("Left Pull", "Reach, grab and pull with your left hand", self.pull_left),
-            Action("Right Pull", "Reach, grab and pull with your right hand", self.pull_right),
+            Action("Left Pull", "Reach, grab and pull with your left hand"),
+            Action("Right Pull", "Reach, grab and pull with your right hand"),
         )
 
     def start(self) -> None:
@@ -64,32 +64,6 @@ class TugOfWar(CalibratedMinigame):
         self.idle_time = 0.0
         self.total_pulls = 0
         self.status = "Reach forward with either open hand"
-
-    def pull_left(self) -> None:
-        self._keyboard_pull("left")
-
-    def pull_right(self) -> None:
-        self._keyboard_pull("right")
-
-    def _keyboard_pull(self, side: str) -> None:
-        if self.mode != "play" or self.result is not None:
-            return
-        if self.expected_side is not None and side == self.expected_side:
-            self._complete_pull(side)
-        elif self.expected_side is None:
-            self._complete_pull(side)
-        else:
-            self.status = f"Use your {self.expected_side} hand next"
-
-    def handle_event(self, event: pygame.event.Event) -> None:
-        super().handle_event(event)
-        if event.type != pygame.KEYDOWN:
-            return
-        left, right = self.actions
-        if event.key in (pygame.K_a, pygame.K_LEFT):
-            left.perform()
-        elif event.key in (pygame.K_d, pygame.K_RIGHT):
-            right.perform()
 
     # Calibration
     def read_sample(self) -> float | None:

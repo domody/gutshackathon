@@ -27,12 +27,6 @@ class FaceMinigame(CalibratedMinigame):
     def calibration_prompt(self) -> str:
         return "Look straight at the camera..."
 
-    def recentre(self) -> None:
-        """Treat the current pose as straight ahead."""
-        sample = self.read_sample()
-        if sample is not None:
-            self.neutral = sample
-
     def read_offsets(self) -> tuple[float, float] | None:
         """(yaw offset in full turns, roll offset in degrees) from neutral, or None if no face."""
         sample = self.read_sample()

@@ -29,7 +29,6 @@ SURVIVE_SECONDS = 15.0
 # Control
 DEAD_ZONE = 0.08            # ignore tiny head movements (fraction of full turn)
 PLAYER_SPEED = 2.0          # max player speed, screen-widths per second
-KEY_STEP = 0.25             # keyboard fallback: screen fraction per key press
 EDGE_MARGIN = 0.04
 PLAYER_HALF_W = 16
 
@@ -85,8 +84,8 @@ class DodgeTheManager(FaceMinigame):
     @property
     def actions(self) -> tuple[Action, Action]:
         return (
-            Action("Lean Left", "Turn your head left to slide left (or A / Left)", self.move_left),
-            Action("Lean Right", "Turn your head right to slide right (or D / Right)", self.move_right),
+            Action("Lean Left", "Turn your head left to slide left"),
+            Action("Lean Right", "Turn your head right to slide right"),
         )
 
     def start(self) -> None:
@@ -105,23 +104,6 @@ class DodgeTheManager(FaceMinigame):
         self.beam_u: float | None = None
         self.exposure = 0.0
         self.lit = False
-
-    # Handle input
-    def move_left(self) -> None:
-        self.target_u = max(0.0, self.target_u - KEY_STEP)
-
-    def move_right(self) -> None:
-        self.target_u = min(1.0, self.target_u + KEY_STEP)
-
-    def handle_event(self, event: pygame.event.Event) -> None:
-        super().handle_event(event)
-        if event.type != pygame.KEYDOWN:
-            return
-        left, right = self.actions
-        if event.key in (pygame.K_a, pygame.K_LEFT):
-            left.perform()
-        elif event.key in (pygame.K_d, pygame.K_RIGHT):
-            right.perform()
 
     # Update state
     def update(self, dt: float) -> None:
@@ -147,7 +129,7 @@ class DodgeTheManager(FaceMinigame):
     def _update_control(self) -> None:
         offsets = self.read_offsets()
         if offsets is None:
-            return  # face lost (or keyboard only): keep current target
+            return  # face lost: keep current target
         off = max(-1.0, min(1.0, offsets[0]))
         if abs(off) < DEAD_ZONE:
             off = 0.0
@@ -335,9 +317,9 @@ class DodgeTheManager(FaceMinigame):
         draw_camera_preview(screen, self.tracker)
 
         if self.tracker.available:
-            info = f"Head tracking: {self.tracker.backend}   (C = recentre)"
+            info = f"Head tracking: {self.tracker.backend}"
         else:
-            info = "No camera tracking - keyboard: A/D or arrows"
+            info = "Camera tracking unavailable"
         draw_status_line(screen, self.small_font, info)
 
         if self.mode == "calibrate":

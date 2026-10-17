@@ -44,14 +44,6 @@ class CalibratedMinigame(Minigame):
         ratio = width / max(self.neutral, 1e-4)
         return 1.0 - self.distance_tolerance <= ratio <= 1.0 + self.distance_tolerance
 
-    def handle_event(self, event: pygame.event.Event) -> None:
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_c:
-            self.recentre()
-
-    def recentre(self) -> None:
-        """Redo the calibration."""
-        self.begin_calibration()
-
     def update_calibration(self, dt: float) -> None:
         self.wait_time += dt
         sample = self.read_sample()
