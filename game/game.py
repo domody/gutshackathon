@@ -1,6 +1,8 @@
 import pygame
 
+from game.games import LaneDodge
 from game.menu import Menu, MenuItem
+from game.minigame import Minigame
 from game.settings import Settings
 
 
@@ -18,6 +20,7 @@ class Game:
         pygame.display.set_caption(self.settings.title)
         self.clock = pygame.time.Clock()
         self.running = False
+        self.minigame: Minigame | None = None
         self.menu = Menu(
             self.settings.title,
             [
@@ -28,7 +31,8 @@ class Game:
         )
 
     def start_game(self) -> None:
-        pass
+        self.minigame = LaneDodge(self.screen)
+        self.minigame.start()
 
     def tutorial(self) -> None:
         pass
@@ -49,13 +53,21 @@ class Game:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.quit()
+            elif self.minigame:
+                self.minigame.handle_event(event)
             else:
                 self.menu.handle_event(event)
 
     def update(self, dt: float) -> None:
-        pass
+        if self.minigame:
+            self.minigame.update(dt)
+            if self.minigame.finished:
+                self.minigame = None
 
     def draw(self) -> None:
         self.screen.fill(self.settings.background)
-        self.menu.draw(self.screen)
+        if self.minigame:
+            self.minigame.draw(self.screen)
+        else:
+            self.menu.draw(self.screen)
         pygame.display.flip()
