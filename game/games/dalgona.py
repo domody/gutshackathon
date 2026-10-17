@@ -6,42 +6,52 @@ import pygame
 
 from game.minigame import Action, Minigame
 from game.tracking import HandTracker
-from game.ui import draw_bar, draw_camera_preview, draw_status_line
+from game.ui import draw_bar, draw_camera_preview, draw_status_line, draw_text_centered
 
+TOLERANCE = 0.034
+MAX_OFF_LINE = 0.085
+WIN_COVERAGE = 0.92
+SAMPLE_SPACING = 6
+SLIDE_SECONDS = 0.72
+PAGE_PAUSE = 1.15
+RETRY_PAUSE = 1.25
+END_DELAY = 2.2
 
-TOLERANCE = 0.035          # on-line distance, fraction of screen height
-MAX_OFF_LINE = 0.12        # off-line crack length allowed, fraction of screen height
-WIN_COVERAGE = 0.95        # fraction of the outline to crack
-SAMPLE_SPACING = 6         # px between outline sample points
-END_DELAY = 1.5            # seconds the result stays up
-
-BG = (30, 24, 20)
-COOKIE = (214, 163, 84)
-COOKIE_EDGE = (170, 120, 52)
-LINE = (120, 78, 30)
-CRACK_OK = (90, 50, 20)
-CRACK_BAD = (200, 50, 40)
-CUT_DONE = (250, 232, 170)
+DESK = (75, 55, 43)
+DESK_GRAIN = (98, 72, 55)
+PAPER = (247, 244, 232)
+PAPER_SHADOW = (39, 30, 25)
+INK = (30, 39, 49)
+MUTED = (105, 108, 107)
+BLUE = (30, 103, 164)
+GUIDE = (137, 168, 192)
+SIGNED = (25, 74, 124)
+BAD = (205, 62, 62)
+GREEN = (67, 161, 103)
+AMBER = (226, 157, 47)
+WHITE = (250, 250, 247)
 
 
 class Dalgona(Minigame):
-    """Pinch and trace the shape without cracking outside the line."""
-
-    title = "Dalgona"
+    title = "Contract Signing Day"
     tracker_cls = HandTracker
 
     def __init__(self, screen: pygame.Surface, tracker: HandTracker | None = None) -> None:
         super().__init__(screen, tracker)
+        self.heading_font = pygame.font.Font(None, 58)
+        self.document_font = pygame.font.Font(None, 32)
+        self.name_font = pygame.font.Font(None, 40)
+        self.body_font = pygame.font.Font(None, 25)
+        self.meter_font = pygame.font.Font(None, 18)
         self.start()
 
     @property
     def actions(self) -> tuple[Action, Action]:
         return (
-            Action("Move Hand", "Your index finger is the pointer (or the mouse)", self.move_hand),
-            Action("Pinch", "Pinch thumb and index to crack (or hold click / SPACE)", self.pinch),
+            Action("Move Pen", "Move your index finger along the signature guide", self.move_hand),
+            Action("Sign", "Pinch thumb and index to put pen to paper", self.pinch),
         )
 
-    # Input is polled in update(); these exist for the tutorial.
     def move_hand(self) -> None:
         pass
 
@@ -50,145 +60,363 @@ class Dalgona(Minigame):
 
     def start(self) -> None:
         super().start()
+        width, height = self.screen.get_size()
+        self.name = "WM"
+        self.state = "name"
+        self.page_index = 0
+        self.page_y = -height
+        self.slide_time = 0.0
+        self.pause_timer = 0.0
         self.end_timer = 0.0
         self.result: bool | None = None
-
-        w, h = self.screen.get_size()
-        self.center = (w / 2, h / 2)
-        radius = h * 0.26
-        self.cookie_radius = radius * 1.55
-        self.tolerance = TOLERANCE * h
-        self.max_off = MAX_OFF_LINE * h
-        self.verts = [
-            (self.center[0] + radius * math.cos(math.radians(a)),
-             self.center[1] + radius * math.sin(math.radians(a)))
-            for a in (-90, 30, 150)
-        ]
-        self.samples = self._sample_outline()
-        self.covered = [False] * len(self.samples)
-
-        self.pointer = self.center
+        self.paper_rect = self._paper_rect(width, height)
+        self.pointer = (width / 2, height / 2)
         self.prev_pointer: tuple[float, float] | None = None
         self.pinching = False
-        self.face_lost = False
+        self.hand_lost = False
         self.off_length = 0.0
-        self.cracks: list[list[tuple[float, float, bool]]] = []
+        self.samples: list[tuple[float, float]] = []
+        self.covered: list[bool] = []
+        self.strokes: list[list[tuple[float, float, bool]]] = []
         self._keys_pinch = False
+        self.retry_count = 0
+        self.retry_stage = "name"
+        self.status = "Pinch and trace WM"
+        self._reset_name_trace()
 
-    def _sample_outline(self) -> list[tuple[float, float]]:
-        pts = []
-        for i in range(3):
-            (x0, y0), (x1, y1) = self.verts[i], self.verts[(i + 1) % 3]
-            n = max(1, int(math.dist((x0, y0), (x1, y1)) / SAMPLE_SPACING))
-            pts += [(x0 + (x1 - x0) * t / n, y0 + (y1 - y0) * t / n) for t in range(n)]
-        return pts
+    def _paper_rect(self, width: int, height: int) -> pygame.Rect:
+        paper_width = min(700, int(width * 0.72))
+        paper_top = max(138, int(height * 0.1))
+        paper_height = min(540, height - paper_top - 38)
+        return pygame.Rect(width // 2 - paper_width // 2, paper_top, paper_width, paper_height)
 
-    # Handle input
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
             self._keys_pinch = True
         elif event.type == pygame.KEYUP and event.key == pygame.K_SPACE:
             self._keys_pinch = False
 
+    def _begin_page(self, index: int) -> None:
+        self.page_index = index
+        self.state = "sliding"
+        self.slide_time = 0.0
+        self.page_y = -self.paper_rect.height - 30
+        self._reset_signature()
+        self.status = "Document incoming..."
+
+    def _reset_signature(self) -> None:
+        self.samples = self._build_signature(self.page_index)
+        self.covered = [False] * len(self.samples)
+        self.off_length = 0.0
+        self.strokes = []
+        self.prev_pointer = None
+        self.pinching = False
+
+    def _build_signature(self, page_index: int) -> list[tuple[float, float]]:
+        rect = self.paper_rect
+        left = rect.x + int(rect.width * 0.19)
+        right = rect.right - int(rect.width * 0.14)
+        center_y = rect.y + int(rect.height * 0.76)
+        width = right - left
+        points: list[tuple[float, float]] = []
+        count = max(80, int(width / SAMPLE_SPACING) * 2)
+        for index in range(count):
+            t = index / (count - 1)
+            x = left + width * t
+            if page_index == 0:
+                wave = math.sin(t * math.pi * 7.5) * (1 - t * 0.5)
+                flourish = math.sin(t * math.pi * 2) * 0.35
+                y = center_y + (wave + flourish) * rect.height * 0.055
+            else:
+                wave = math.sin(t * math.pi * 5.5)
+                underline = math.sin(t * math.pi) * 0.28
+                y = center_y + (wave - underline) * rect.height * 0.05
+            points.append((x, y))
+        return points
+
     def _read_input(self) -> tuple[tuple[float, float], bool]:
-        w, h = self.screen.get_size()
+        width, height = self.screen.get_size()
         hand = self.tracker.hand if self.tracker.available else None
         if self.tracker.available:
-            self.face_lost = hand is None
+            self.hand_lost = hand is None
             if hand is None:
                 return self.pointer, False
-            return (hand[0] * w, hand[1] * h), hand[2]
+            return (hand[0] * width, hand[1] * height), hand[2]
         return pygame.mouse.get_pos(), self._keys_pinch or pygame.mouse.get_pressed()[0]
 
-    # Update state
     def update(self, dt: float) -> None:
         if self.finished:
             return
+        dt = min(dt, 0.1)
+
         if self.result is not None:
             self.end_timer += dt
             if self.end_timer >= END_DELAY:
                 self.finish(self.result)
             return
 
-        pos, pinch = self._read_input()
+        if self.state == "name":
+            position, pinch = self._read_input()
+            self._trace_input(position, pinch)
+            if self.off_length > MAX_OFF_LINE * self.screen.get_height():
+                self.retry_stage = "name"
+                self.state = "retry"
+                self.pause_timer = 0.0
+                self.retry_count += 1
+                self.pinching = False
+                self.status = "Outside the letters - try WM again"
+            elif self.coverage >= WIN_COVERAGE:
+                self.state = "name_complete"
+                self.pause_timer = 0.0
+                self.pinching = False
+                self.status = "Name added"
+            return
+        if self.state == "sliding":
+            self.slide_time = min(SLIDE_SECONDS, self.slide_time + dt)
+            amount = 1 - (1 - self.slide_time / SLIDE_SECONDS) ** 3
+            self.page_y = -self.paper_rect.height + (self.paper_rect.y + self.paper_rect.height) * amount
+            if self.slide_time >= SLIDE_SECONDS:
+                self.page_y = self.paper_rect.y
+                self.state = "signing"
+                self.status = "Pinch and trace inside the signature guide"
+            return
+        if self.state in ("name_complete", "page_complete", "retry"):
+            self.pause_timer += dt
+            pause = PAGE_PAUSE if self.state in ("name_complete", "page_complete") else RETRY_PAUSE
+            if self.pause_timer < pause:
+                return
+            if self.state == "retry":
+                if self.retry_stage == "name":
+                    self.state = "name"
+                    self._reset_name_trace()
+                    self.status = "Try again - trace WM inside the guide"
+                else:
+                    self.state = "signing"
+                    self._reset_signature()
+                    self.status = "Try again - keep the pen inside the guide"
+            elif self.state == "name_complete":
+                self._begin_page(0)
+            elif self.page_index == 0:
+                self._begin_page(1)
+            else:
+                self.result = True
+                self.end_timer = 0.0
+            return
+
+        position, pinch = self._read_input()
+        self._trace_input(position, pinch)
+
+        if self.off_length > MAX_OFF_LINE * self.screen.get_height():
+            self.retry_stage = "signing"
+            self.state = "retry"
+            self.pause_timer = 0.0
+            self.retry_count += 1
+            self.pinching = False
+            self.status = "Outside the lines - this copy is void"
+        elif self.coverage >= WIN_COVERAGE:
+            self.state = "page_complete"
+            self.pause_timer = 0.0
+            self.pinching = False
+            self.status = "Signed and witnessed"
+
+    def _trace_input(self, position: tuple[float, float], pinch: bool) -> None:
         was_pinching = self.pinching
         self.pinching = pinch
         if not pinch:
-            self.pointer, self.prev_pointer = pos, None
+            self.pointer = position
+            self.prev_pointer = None
             return
 
-        # Crack from the last pointer position (or here, if the pinch just began).
-        start = self.prev_pointer if was_pinching and self.prev_pointer else pos
+        start = self.prev_pointer if was_pinching and self.prev_pointer else position
         if not was_pinching:
-            self.cracks.append([])
-        self._crack_along(start, pos)
-        self.pointer, self.prev_pointer = pos, pos
+            self.strokes.append([])
+        self._sign_along(start, position)
+        self.pointer = position
+        self.prev_pointer = position
 
-        if self.off_length > self.max_off:
-            self.result = False
-        elif sum(self.covered) / len(self.covered) >= WIN_COVERAGE:
-            self.result = True
+    @property
+    def coverage(self) -> float:
+        return sum(self.covered) / max(1, len(self.covered))
 
-    def _crack_along(self, a: tuple[float, float], b: tuple[float, float]) -> None:
-        dist = math.dist(a, b)
-        steps = max(1, int(dist / 6))
-        step_len = dist / steps
-        for i in range(1, steps + 1):
-            t = i / steps
-            p = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
-            near = min(math.dist(p, s) for s in self.samples)
-            on_line = near <= self.tolerance
+    def _reset_name_trace(self) -> None:
+        width, height = self.screen.get_size()
+        center_x = width // 2
+        top = int(height * 0.39)
+        bottom = int(height * 0.66)
+        middle = (top + bottom) // 2
+        w_left = center_x - 190
+        m_left = center_x + 15
+        polylines = (
+            ((w_left, top), (w_left + 42, bottom), (w_left + 84, middle), (w_left + 126, bottom), (w_left + 168, top)),
+            ((m_left, bottom), (m_left, top), (m_left + 70, middle), (m_left + 140, top), (m_left + 140, bottom)),
+        )
+        self.samples = []
+        for polyline in polylines:
+            for start, end in zip(polyline, polyline[1:]):
+                count = max(2, int(math.dist(start, end) / SAMPLE_SPACING))
+                self.samples.extend(
+                    (start[0] + (end[0] - start[0]) * amount / count,
+                     start[1] + (end[1] - start[1]) * amount / count)
+                    for amount in range(count)
+                )
+        self.covered = [False] * len(self.samples)
+        self.off_length = 0.0
+        self.strokes = []
+        self.prev_pointer = None
+        self.pinching = False
+
+    def _sign_along(self, start: tuple[float, float], end: tuple[float, float]) -> None:
+        distance = math.dist(start, end)
+        steps = max(1, int(distance / SAMPLE_SPACING))
+        step_length = distance / steps
+        tolerance = TOLERANCE * self.screen.get_height()
+        for index in range(1, steps + 1):
+            amount = index / steps
+            point = (start[0] + (end[0] - start[0]) * amount, start[1] + (end[1] - start[1]) * amount)
+            near = min(math.dist(point, sample) for sample in self.samples)
+            on_line = near <= tolerance
             if on_line:
-                for j, s in enumerate(self.samples):
-                    if math.dist(p, s) <= self.tolerance:
-                        self.covered[j] = True
+                for sample_index, sample in enumerate(self.samples):
+                    if math.dist(point, sample) <= tolerance:
+                        self.covered[sample_index] = True
             else:
-                self.off_length += step_len
-            self.cracks[-1].append((p[0], p[1], on_line))
+                self.off_length += step_length
+            self.strokes[-1].append((point[0], point[1], on_line))
 
-    # Draw the scene
     def draw(self, screen: pygame.Surface) -> None:
-        w, h = screen.get_size()
-        screen.fill(BG)
-        cx, cy = int(self.center[0]), int(self.center[1])
-        pygame.draw.circle(screen, COOKIE_EDGE, (cx, cy), int(self.cookie_radius) + 6)
-        pygame.draw.circle(screen, COOKIE, (cx, cy), int(self.cookie_radius))
-        pygame.draw.polygon(screen, LINE, self.verts, 4)
-
-        # cracked stretches of the outline
-        for (x, y), done in zip(self.samples, self.covered):
-            if done:
-                pygame.draw.circle(screen, CUT_DONE, (int(x), int(y)), 4)
-        for stroke in self.cracks:
-            for (x0, y0, _), (x1, y1, ok) in zip(stroke, stroke[1:]):
-                pygame.draw.line(screen, CRACK_OK if ok else CRACK_BAD, (x0, y0), (x1, y1), 3)
-
-        color = (255, 90, 70) if self.pinching else (255, 255, 255)
-        px, py = int(self.pointer[0]), int(self.pointer[1])
-        pygame.draw.circle(screen, color, (px, py), 10 if self.pinching else 14, 3)
-
-        self._draw_hud(screen, w, h)
-        if self.result is not None:
-            msg, col = ("COOKIE CLEARED!", (110, 230, 130)) if self.result else ("CRACKED!", (240, 80, 70))
-            text = self.big_font.render(msg, True, col)
-            screen.blit(text, (w // 2 - text.get_width() // 2, 60))
-
-    def _draw_hud(self, screen: pygame.Surface, w: int, h: int) -> None:
-        bx, bw, bh = 20, 220, 14
-        for i, (label, frac, col) in enumerate((
-            ("PROGRESS", sum(self.covered) / len(self.covered) / WIN_COVERAGE, (110, 220, 130)),
-            ("CRACK DAMAGE", self.off_length / self.max_off, (230, 70, 60)),
-        )):
-            y = 20 + i * 44
-            draw_bar(screen, (bx, y + 20, bw, bh), frac, col, back=(60, 52, 46))
-            screen.blit(self.small_font.render(label, True, (210, 200, 190)), (bx, y))
-
+        width, height = screen.get_size()
+        self._draw_desk(screen, width, height)
+        if self.state in ("name", "name_complete") or (self.state == "retry" and self.retry_stage == "name"):
+            self._draw_name_entry(screen, width, height)
+            self._draw_pointer(screen)
+        else:
+            self._draw_document(screen, width, height)
+            self._draw_pointer(screen)
+            self._draw_hud(screen, width, height)
         draw_camera_preview(screen, self.tracker)
 
         if self.tracker.available:
-            info = "Hand tracking on - pinch to crack"
-            if self.face_lost:
-                info = "Hand lost!"
+            info = "Hand tracking on - pinch to put pen to paper"
+            if self.hand_lost:
+                info = "Hand lost - signing paused"
         else:
-            info = "No camera - mouse to move, hold click or SPACE to pinch"
-        draw_status_line(screen, self.small_font, info, (160, 150, 140))
+            info = "No camera - mouse to move, hold click or SPACE to sign"
+        draw_status_line(screen, self.small_font, info, WHITE)
+
+        if self.result is not None:
+            overlay = pygame.Surface((width, height), pygame.SRCALPHA)
+            overlay.fill((15, 24, 31, 225))
+            screen.blit(overlay, (0, 0))
+            draw_text_centered(screen, self.heading_font, "PAPERWORK COMPLETE", GREEN, (width // 2, height // 2 - 40))
+            draw_text_centered(screen, self.font, "Welcome aboard. Legal will be in touch.", WHITE, (width // 2, height // 2 + 25))
+
+    def _draw_desk(self, screen: pygame.Surface, width: int, height: int) -> None:
+        screen.fill(DESK)
+        for y in range(20, height, 54):
+            pygame.draw.line(screen, DESK_GRAIN, (0, y), (width, y + 14), 2)
+        pygame.draw.rect(screen, (25, 31, 37), (20, 14, 255, 54), border_radius=10)
+        title = self.document_font.render("CONTRACT SIGNING DAY", True, WHITE)
+        screen.blit(title, title.get_rect(center=(147, 41)))
+
+    def _draw_name_entry(self, screen: pygame.Surface, width: int, height: int) -> None:
+        card = pygame.Rect(width // 2 - min(350, width // 2 - 30), 82, min(700, width - 60), height - 120)
+        pygame.draw.rect(screen, PAPER_SHADOW, card.move(10, 12), border_radius=14)
+        pygame.draw.rect(screen, PAPER, card, border_radius=14)
+        draw_text_centered(screen, self.heading_font, "Add Your Name", INK, (width // 2, card.y + 58))
+        draw_text_centered(screen, self.font, "Pinch and trace the outlined WM", MUTED, (width // 2, card.y + 101))
+        for sample, done in zip(self.samples, self.covered):
+            pygame.draw.circle(screen, SIGNED if done else GUIDE, (int(sample[0]), int(sample[1])), 4 if done else 3)
+        for stroke in self.strokes:
+            for first, second in zip(stroke, stroke[1:]):
+                pygame.draw.line(screen, SIGNED if second[2] else BAD, (first[0], first[1]), (second[0], second[1]), 4)
+        line_y = int(height * 0.7)
+        pygame.draw.line(screen, MUTED, (card.x + 95, line_y), (card.right - 95, line_y), 2)
+        draw_text_centered(screen, self.small_font, "Lift your fingers between W and M", BLUE, (width // 2, line_y + 30))
+        draw_bar(screen, (card.x + 120, card.bottom - 35, card.width - 240, 10), self.coverage / WIN_COVERAGE, GREEN, back=(210, 210, 201), radius=5)
+        if self.state == "name_complete":
+            draw_text_centered(screen, self.font, "NAME ADDED", GREEN, (width // 2, card.bottom - 64))
+        elif self.state == "retry":
+            draw_text_centered(screen, self.font, "OUTSIDE THE LETTERS", BAD, (width // 2, card.bottom - 64))
+
+    def _draw_document(self, screen: pygame.Surface, width: int, height: int) -> None:
+        rect = self.paper_rect.copy()
+        rect.y = int(self.page_y)
+        offset = rect.y - self.paper_rect.y
+        pygame.draw.rect(screen, PAPER_SHADOW, rect.move(10, 12), border_radius=5)
+        pygame.draw.rect(screen, PAPER, rect, border_radius=5)
+        pygame.draw.rect(screen, (221, 216, 201), rect, width=2, border_radius=5)
+
+        page_title = "INTERNSHIP AGREEMENT" if self.page_index == 0 else "NON-DISCLOSURE AGREEMENT"
+        title = self.heading_font.render(page_title, True, INK)
+        if title.get_width() > rect.width - 50:
+            title = self.document_font.render(page_title, True, INK)
+        screen.blit(title, title.get_rect(midtop=(rect.centerx, rect.y + 28)))
+        pygame.draw.line(screen, BLUE, (rect.x + 45, rect.y + 90), (rect.right - 45, rect.y + 90), 3)
+
+        name_label = self.small_font.render("EMPLOYEE NAME", True, MUTED)
+        screen.blit(name_label, (rect.x + 48, rect.y + 112))
+        name = self.name_font.render(self.name, True, INK)
+        screen.blit(name, (rect.x + 48, rect.y + 134))
+        pygame.draw.line(screen, INK, (rect.x + 45, rect.y + 176), (rect.right - 45, rect.y + 176), 2)
+
+        lines = (
+            ("I agree to attend meetings, answer emails, and pretend", "to understand the shared drive naming convention."),
+            ("I agree not to disclose confidential information,", "including who keeps stealing lunch from the fridge."),
+        )[self.page_index]
+        for index, line in enumerate(lines):
+            body = self.body_font.render(line, True, INK)
+            screen.blit(body, (rect.x + 48, rect.y + 205 + index * 34))
+
+        signature_y = rect.y + int(rect.height * 0.63)
+        label = self.small_font.render("AUTHORIZED SIGNATURE - TRACE THE GUIDE", True, BLUE)
+        screen.blit(label, (rect.x + 48, signature_y))
+        pygame.draw.line(screen, MUTED, (rect.x + 48, rect.y + int(rect.height * 0.84)), (rect.right - 48, rect.y + int(rect.height * 0.84)), 2)
+
+        if abs(offset) < 1:
+            for sample, done in zip(self.samples, self.covered):
+                color = SIGNED if done else GUIDE
+                radius = 4 if done else 3
+                pygame.draw.circle(screen, color, (int(sample[0]), int(sample[1])), radius)
+            for stroke in self.strokes:
+                for first, second in zip(stroke, stroke[1:]):
+                    color = SIGNED if second[2] else BAD
+                    pygame.draw.line(screen, color, (first[0], first[1]), (second[0], second[1]), 4)
+
+        footer = self.small_font.render(f"Page {self.page_index + 1} of 2", True, MUTED)
+        screen.blit(footer, footer.get_rect(midbottom=(rect.centerx, rect.bottom - 18)))
+
+        if self.state == "page_complete":
+            stamp = self.heading_font.render("SIGNED", True, GREEN)
+            stamp_rect = stamp.get_rect(center=(rect.right - 120, rect.y + 118)).inflate(20, 10)
+            pygame.draw.rect(screen, GREEN, stamp_rect, width=5, border_radius=5)
+            screen.blit(stamp, stamp.get_rect(center=stamp_rect.center))
+        elif self.state == "retry":
+            stamp = self.heading_font.render("VOID", True, BAD)
+            stamp_rect = stamp.get_rect(center=(rect.right - 105, rect.y + 118)).inflate(20, 10)
+            pygame.draw.rect(screen, BAD, stamp_rect, width=5, border_radius=5)
+            screen.blit(stamp, stamp.get_rect(center=stamp_rect.center))
+
+    def _draw_pointer(self, screen: pygame.Surface) -> None:
+        if self.state not in ("name", "signing"):
+            return
+        color = BAD if self.pinching else BLUE
+        x, y = int(self.pointer[0]), int(self.pointer[1])
+        pygame.draw.circle(screen, WHITE, (x, y), 13)
+        pygame.draw.circle(screen, color, (x, y), 13, 3)
+        pygame.draw.line(screen, color, (x + 9, y - 9), (x + 25, y - 25), 5)
+
+    def _draw_hud(self, screen: pygame.Surface, width: int, height: int) -> None:
+        if self.state == "sliding":
+            return
+        panel = pygame.Rect(10, self.paper_rect.y + 18, max(94, self.paper_rect.x - 20), 112)
+        pygame.draw.rect(screen, (25, 31, 37), panel, border_radius=10)
+        progress = self.coverage / WIN_COVERAGE
+        damage = self.off_length / (MAX_OFF_LINE * height)
+        screen.blit(self.meter_font.render("TRACE", True, WHITE), (panel.x + 9, panel.y + 10))
+        draw_bar(screen, (panel.x + 9, panel.y + 31, panel.width - 18, 10), progress, GREEN, back=(66, 72, 77), radius=5)
+        screen.blit(self.meter_font.render("ERROR", True, WHITE), (panel.x + 9, panel.y + 56))
+        draw_bar(screen, (panel.x + 9, panel.y + 77, panel.width - 18, 10), damage, BAD, back=(66, 72, 77), radius=5)
+        status = self.small_font.render(self.status, True, WHITE)
+        status_box = status.get_rect(midtop=(width // 2, 82)).inflate(24, 10)
+        pygame.draw.rect(screen, (25, 31, 37), status_box, border_radius=8)
+        screen.blit(status, status.get_rect(center=status_box.center))
