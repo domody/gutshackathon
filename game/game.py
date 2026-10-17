@@ -4,6 +4,7 @@ from game.games import CatchOrDrop, CoffeeRun, Dalgona, RedLightGreenLight, Dodg
 from game.minigame import Minigame
 from game.scenes import SCENES
 from game.settings import Settings
+from game.tracking import HandTracker
 from game.ui import ScreenManager
 from game.ui.screens import FailScreen, FiredScreen, Menu, MenuItem, MinigameIntro, PassScreen, SceneScreen
 
@@ -28,6 +29,8 @@ class Game:
         self.remaining: list[type[Minigame]] = []
         self.minigame: Minigame | None = None
         self.strikes = 0
+        self.navigation_tracker = HandTracker()
+        self.pinch_was_down = False
         self.ui = ScreenManager()
         self.menu = Menu(
             self.settings.title,
@@ -44,6 +47,9 @@ class Game:
 
     def next_minigame(self) -> None:
         """Start the next minigame in order, or return to the menu when none are left."""
+        self.navigation_tracker.stop()
+        if self.minigame:
+            self.minigame.close()
         if not self.remaining:
             self.minigame = None
             self.ui.show(self.menu)
@@ -51,6 +57,9 @@ class Game:
         cls = self.remaining.pop(0)
         self.minigame = cls(self.screen)
         self.minigame.day_strikes = self.strikes
+        self.minigame.close()
+        self.navigation_tracker.start()
+        self.pinch_was_down = False
         scene = SCENES.get(cls)
         if scene is None:
             self.show_intro()
@@ -70,10 +79,16 @@ class Game:
         """Start the minigame and fade the intro out over it."""
         if not self.minigame:
             return
+        self.navigation_tracker.stop()
+        if self.minigame.tracker is not None:
+            self.minigame.tracker.start()
         self.minigame.start()
         self.ui.dismiss(self.ui.clear, fade_background=True, backdrop=self.minigame.draw)
 
     def quit(self) -> None:
+        self.navigation_tracker.stop()
+        if self.minigame:
+            self.minigame.close()
         self.running = False
 
     def run(self) -> None:
@@ -99,12 +114,15 @@ class Game:
     def update(self, dt: float) -> None:
         if self.ui.active:
             self.ui.update(dt)
+            self._update_pinch_navigation()
             if self.ui.leaving and self.minigame:
                 self.minigame.update(dt)  # Keep the game updating under the closing fade.
         elif self.minigame:
             self.minigame.update(dt)
             if self.minigame.finished:
                 self.minigame.close()
+                self.navigation_tracker.start()
+                self.pinch_was_down = False
                 self.strikes = self.minigame.day_strikes
                 if self.strikes >= 3:
                     self.remaining.clear()
@@ -115,6 +133,15 @@ class Game:
                     if not self.minigame.won:
                         screen.DESCRIPTION = f"Strike {self.strikes} of 3."
                 self.ui.show(screen, backdrop=self.minigame.draw)
+
+    def _update_pinch_navigation(self) -> None:
+        if self.ui.leaving or not self.navigation_tracker.available:
+            return
+        hand = self.navigation_tracker.hand
+        pinching = bool(hand and hand[2])
+        if pinching and not self.pinch_was_down and self.ui.current:
+            self.ui.current.gesture_continue()
+        self.pinch_was_down = pinching
 
     def draw(self) -> None:
         self.screen.fill(self.settings.background)

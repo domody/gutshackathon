@@ -8,7 +8,7 @@ from game.ui.typewriter import Typewriter
 
 
 class MinigameIntro(Screen):
-    """Pre-game screen: title, the two actions side by side, and an Okay button."""
+    """Pre-game screen: title, the two actions side by side, and a pinch prompt."""
 
     TITLE_SIZE = 96
     SUBTITLE_SIZE = 56
@@ -52,11 +52,14 @@ class MinigameIntro(Screen):
     def handle_event(self, event: pygame.event.Event) -> None:
         if not self._writer.done:
             return
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self.on_okay()
-        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            if self._button_rect.collidepoint(event.pos):
-                self.on_okay()
+
+    def gesture_continue(self) -> None:
+        if self._writer.done:
+            self.on_okay()
+        else:
+            self._writer.finish()
 
     def draw(self, surface: pygame.Surface) -> None:
         width, height = surface.get_size()
@@ -90,10 +93,5 @@ class MinigameIntro(Screen):
         return desc_rect.bottom
 
     def _draw_button(self, surface: pygame.Surface, center_x: int, top: int) -> None:
-        text = self._button_font.render("Okay", True, self.BUTTON_TEXT)
-        self._button_rect = text.get_rect().inflate(80, 30)
-        self._button_rect.midtop = (center_x, top)
-        hovered = self._button_rect.collidepoint(pygame.mouse.get_pos())
-        color = self.BUTTON_HOVER if hovered else self.BUTTON_COLOR
-        pygame.draw.rect(surface, color, self._button_rect, border_radius=12)
-        surface.blit(text, text.get_rect(center=self._button_rect.center))
+        text = self._button_font.render("PINCH TO START", True, self.BUTTON_COLOR)
+        surface.blit(text, text.get_rect(midtop=(center_x, top)))

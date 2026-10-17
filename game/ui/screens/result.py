@@ -7,7 +7,7 @@ from game.ui.typewriter import Typewriter
 
 
 class ResultScreen(Screen):
-    """Title and description; Enter or click continues."""
+    """Title and description; a pinch continues."""
 
     TITLE_SIZE = 120
     DESC_SIZE = 56
@@ -32,10 +32,14 @@ class ResultScreen(Screen):
     def handle_event(self, event: pygame.event.Event) -> None:
         if not self._writer.done:
             return
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self.on_continue()
-        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+
+    def gesture_continue(self) -> None:
+        if self._writer.done:
             self.on_continue()
+        else:
+            self._writer.finish()
 
     def update(self, dt: float) -> None:
         self._writer.update(dt)
@@ -50,7 +54,7 @@ class ResultScreen(Screen):
                midtop=(width // 2, title_rect.bottom + 20))
         w.end()
         if w.done:
-            hint = self._hint_font.render("Click or press Enter to continue", True, self.HINT_COLOR)
+            hint = self._hint_font.render("Pinch your fingers together to continue", True, self.HINT_COLOR)
             surface.blit(hint, hint.get_rect(midbottom=(width // 2, height - 40)))
 
 

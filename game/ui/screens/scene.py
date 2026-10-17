@@ -43,10 +43,15 @@ class SceneScreen(Screen):
         self._writer.update(dt)
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        is_key = event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_SPACE)
         is_click = event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
-        if not (is_key or is_click):
+        if not is_click:
             return
+        if self._writer.done:
+            self.on_continue()
+        else:
+            self._writer.finish()
+
+    def gesture_continue(self) -> None:
         if self._writer.done:
             self.on_continue()
         else:
@@ -76,7 +81,7 @@ class SceneScreen(Screen):
             y += line_h
         w.end()
         if w.done:
-            hint = self._hint_font.render("Press Enter to continue", True, self.HINT_COLOR)
+            hint = self._hint_font.render("Pinch your fingers together to continue", True, self.HINT_COLOR)
             surface.blit(hint, hint.get_rect(midbottom=(width // 2, height - 20)))
 
     def _cover(self, size: tuple[int, int]) -> pygame.Surface:
