@@ -1,249 +1,19 @@
-"""Dodge the Spotlight: turn your head to slide left/right and stay in the shadow.
-
-Single-file minigame (camera head tracking + game + demo runner).
-
-Install:  uv add pygame opencv-python mediapipe numpy
-Try it:   python -m game.games.spotlight_dodge      (run from the project root)
-
-In the demo: SPACE = restart, C = recentre head, Esc = quit. Keyboard fallback: A/D or arrows.
-"""
-
 from __future__ import annotations
 
 import math
-import os
 import random
-import sys
-import threading
-import time
-import urllib.request
-from statistics import median
 
-import cv2
-import numpy as np
 import pygame
 
-from game.minigame import Action, Minigame
-
-try:
-    import mediapipe as mp
-    MP_ERROR = None
-except Exception as exc:  # keep the real reason so it can be reported
-    mp = None
-    MP_ERROR = repr(exc)
+from game.face_minigame import FaceMinigame
+from game.minigame import Action
+from game.tracking import FaceTracker
+from game.ui import draw_bar, draw_camera_preview, draw_status_line
 
 
-# =============================================================================
-# Head tracking (background thread; MediaPipe mesh -> MediaPipe tasks -> OpenCV Haar)
-# =============================================================================
-FACE_MODEL_URL = (
-    "https://storage.googleapis.com/mediapipe-models/face_landmarker/"
-    "face_landmarker/float16/1/face_landmarker.task"
-)
-FACE_MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "face_landmarker.task")
-
-# FaceMesh landmark ids: nose tip and the two outer cheek points.
-NOSE_TIP, CHEEK_A, CHEEK_B = 1, 234, 454
-
-STALE_SECONDS = 0.5      # no face for this long -> ratio becomes None
-SMOOTHING = 0.5          # 0..1, higher = snappier, lower = smoother
-PREVIEW_SIZE = (160, 120)
-
-
-class HeadTracker:
-    def __init__(self, camera_index: int = 0) -> None:
-        self.camera_index = camera_index
-        self.backend: str | None = None
-        self.error: str | None = MP_ERROR
-        self.scale = 0.14  # ratio change that maps to "full left/right"
-
-        self._cap = None
-        self._thread: threading.Thread | None = None
-        self._running = False
-        self._lock = threading.Lock()
-        self._ratio: float | None = None
-        self._ratio_time = 0.0
-        self._preview: bytes | None = None
-
-        self._mesh = None
-        self._landmarker = None
-        self._cascade = None
-
-    # ------------------------------------------------------------ lifecycle
-    def start(self) -> None:
-        if self._running:
-            return
-        # Open the camera on the calling (main) thread: macOS wants that.
-        cap = cv2.VideoCapture(self.camera_index)
-        if not cap.isOpened():
-            cap.release()
-            self.error = "could not open webcam"
-            print("Head tracking: OFF -", self.error)
-            return
-        self._cap = cap
-        if not (self._init_mesh() or self._init_tasks() or self._init_haar()):
-            print("Head tracking: OFF -", self.error)
-            print("Python being used:", sys.executable)
-            cap.release()
-            self._cap = None
-            return
-        print(f"Head tracking: ON ({self.backend} backend)")
-        self._running = True
-        self._thread = threading.Thread(target=self._loop, daemon=True)
-        self._thread.start()
-
-    def stop(self) -> None:
-        self._running = False
-        if self._thread is not None:
-            self._thread.join(timeout=1.0)
-            self._thread = None
-        if self._cap is not None:
-            self._cap.release()
-            self._cap = None
-
-    # ------------------------------------------------------------- backends
-    def _init_mesh(self) -> bool:
-        if mp is None:
-            return False
-        try:
-            self._mesh = mp.solutions.face_mesh.FaceMesh(
-                max_num_faces=1, refine_landmarks=False,
-                min_detection_confidence=0.5, min_tracking_confidence=0.5)
-            self.backend, self.scale = "mediapipe-mesh", 0.14
-            return True
-        except Exception as exc:
-            self.error = f"legacy FaceMesh unavailable: {exc!r}"
-            return False
-
-    def _init_tasks(self) -> bool:
-        if mp is None:
-            return False
-        try:
-            from mediapipe.tasks import python as mp_python
-            from mediapipe.tasks.python import vision
-            if not os.path.exists(FACE_MODEL_PATH):
-                print("Downloading face model (one time, ~4 MB)...")
-                urllib.request.urlretrieve(FACE_MODEL_URL, FACE_MODEL_PATH + ".part")
-                os.replace(FACE_MODEL_PATH + ".part", FACE_MODEL_PATH)
-            options = vision.FaceLandmarkerOptions(
-                base_options=mp_python.BaseOptions(model_asset_path=FACE_MODEL_PATH),
-                num_faces=1,
-                running_mode=vision.RunningMode.IMAGE)
-            self._landmarker = vision.FaceLandmarker.create_from_options(options)
-            self.backend, self.scale = "mediapipe-tasks", 0.14
-            return True
-        except Exception as exc:
-            self.error = f"FaceLandmarker failed: {exc!r}"
-            return False
-
-    def _init_haar(self) -> bool:
-        try:
-            path = os.path.join(cv2.data.haarcascades, "haarcascade_frontalface_default.xml")
-            cascade = cv2.CascadeClassifier(path)
-            if cascade.empty():
-                raise RuntimeError("cascade file not found")
-            self._cascade = cascade
-            self.backend, self.scale = "opencv-haar", 0.12
-            return True
-        except Exception as exc:
-            self.error = f"Haar fallback failed: {exc!r}"
-            return False
-
-    # ---------------------------------------------------------- measurement
-    @staticmethod
-    def _mesh_ratio(pts):
-        """Nose position between the cheek edges: ~0.5 facing forward."""
-        a, b = pts[CHEEK_A].x, pts[CHEEK_B].x
-        lo, hi = min(a, b), max(a, b)
-        if hi - lo < 1e-4:
-            return None, []
-        marks = [(pts[i].x, pts[i].y) for i in (NOSE_TIP, CHEEK_A, CHEEK_B)]
-        return (pts[NOSE_TIP].x - lo) / (hi - lo), marks
-
-    def _measure(self, frame_bgr):
-        """Returns (ratio or None, [normalised (x, y) marks for the preview])."""
-        if self.backend == "opencv-haar":
-            h, w = frame_bgr.shape[:2]
-            small_w = 320
-            small_h = int(h * small_w / w)
-            gray = cv2.cvtColor(cv2.resize(frame_bgr, (small_w, small_h)), cv2.COLOR_BGR2GRAY)
-            faces = self._cascade.detectMultiScale(gray, 1.2, 5, minSize=(40, 40))
-            if len(faces) == 0:
-                return None, []
-            x, y, fw, fh = max(faces, key=lambda f: f[2] * f[3])
-            cx, cy = (x + fw / 2) / small_w, (y + fh / 2) / small_h
-            return cx, [(cx, cy)]
-
-        rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        if self.backend == "mediapipe-mesh":
-            res = self._mesh.process(rgb)
-            if not res.multi_face_landmarks:
-                return None, []
-            return self._mesh_ratio(res.multi_face_landmarks[0].landmark)
-
-        img = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb))
-        res = self._landmarker.detect(img)
-        if not res.face_landmarks:
-            return None, []
-        return self._mesh_ratio(res.face_landmarks[0])
-
-    def _loop(self) -> None:
-        while self._running:
-            ok, frame = self._cap.read()
-            if not ok:
-                time.sleep(0.01)
-                continue
-            frame = cv2.flip(frame, 1)  # mirror: turning right moves you right
-            try:
-                ratio, marks = self._measure(frame)
-            except Exception as exc:
-                self.error = f"tracking error: {exc!r}"
-                ratio, marks = None, []
-
-            small = cv2.resize(frame, PREVIEW_SIZE)
-            for mx, my in marks:
-                cv2.circle(small, (int(mx * PREVIEW_SIZE[0]), int(my * PREVIEW_SIZE[1])),
-                           3, (0, 255, 0), -1)
-            preview = cv2.cvtColor(small, cv2.COLOR_BGR2RGB).tobytes()
-
-            now = time.time()
-            with self._lock:
-                if ratio is not None:
-                    fresh = self._ratio is not None and now - self._ratio_time < STALE_SECONDS
-                    self._ratio = (self._ratio * (1 - SMOOTHING) + ratio * SMOOTHING) if fresh else ratio
-                    self._ratio_time = now
-                self._preview = preview
-
-    # ------------------------------------------------------------ accessors
-    @property
-    def available(self) -> bool:
-        return self._running and self.backend is not None
-
-    @property
-    def ratio(self) -> float | None:
-        """Smoothed head ratio, or None if no face has been seen recently."""
-        with self._lock:
-            if self._ratio is None or time.time() - self._ratio_time > STALE_SECONDS:
-                return None
-            return self._ratio
-
-    def preview_surface(self) -> pygame.Surface | None:
-        """Small mirrored camera image with tracking dots, for on-screen display."""
-        with self._lock:
-            data = self._preview
-        if data is None:
-            return None
-        return pygame.image.frombuffer(data, PREVIEW_SIZE, "RGB")
-
-
-# =============================================================================
-# The minigame
-# =============================================================================
 SURVIVE_SECONDS = 15.0
 
 # Control
-CALIBRATE_SECONDS = 1.2     # time spent looking straight ahead to set "centre"
-CALIBRATE_TIMEOUT = 5.0     # give up waiting for a face after this long
 DEAD_ZONE = 0.08            # ignore tiny head movements (fraction of full turn)
 PLAYER_SPEED = 2.2          # max player speed, screen-widths per second
 KEY_STEP = 0.25             # keyboard fallback: screen fraction per key press
@@ -260,26 +30,17 @@ BG = (12, 14, 26)
 FLOOR = (28, 30, 46)
 
 
-class SpotlightDodge(Minigame):
+class SpotlightDodge(FaceMinigame):
     """A searchlight sweeps in from an edge. Stay in shadow for 15 seconds."""
 
     title = "Dodge the Spotlight"
 
-    def __init__(self, screen: pygame.Surface, tracker: HeadTracker | None = None) -> None:
-        super().__init__(screen)
-        pygame.font.init()
-        self.font = pygame.font.Font(None, 36)
-        self.small_font = pygame.font.Font(None, 24)
-        self.big_font = pygame.font.Font(None, 56)
+    def __init__(self, screen: pygame.Surface, tracker: FaceTracker | None = None) -> None:
+        super().__init__(screen, tracker)
         self._overlay: pygame.Surface | None = None
-
-        # Pass a shared HeadTracker in if several minigames use the camera.
-        self._owns_tracker = tracker is None
-        self.tracker = tracker if tracker is not None else HeadTracker()
-        self.tracker.start()
         self.start()
 
-    # ------------------------------------------------------------------ API
+    # Public API
     @property
     def actions(self) -> tuple[Action, Action]:
         return (
@@ -288,18 +49,11 @@ class SpotlightDodge(Minigame):
         )
 
     def start(self) -> None:
-        self.finished = False
-        self.won = False
+        super().start()
         self.elapsed = 0.0
 
         self.player_u = 0.5     # player position, 0..1 across the screen
         self.target_u = 0.5
-        self.neutral: float | None = None
-        self.samples: list[float] = []
-        self.calib_time = 0.0
-        self.wait_time = 0.0
-        self.face_visible = False
-        self.mode = "calibrate" if self.tracker.available else "play"
 
         self.light_phase = "idle"   # idle -> warn -> sweep -> idle ...
         self.light_t = 0.0
@@ -311,12 +65,7 @@ class SpotlightDodge(Minigame):
         self.exposure = 0.0
         self.lit = False
 
-    def close(self) -> None:
-        """Release the camera (only if this minigame created the tracker)."""
-        if self._owns_tracker:
-            self.tracker.stop()
-
-    # ---------------------------------------------------------------- input
+    # Handle input
     def move_left(self) -> None:
         self.target_u = max(0.0, self.target_u - KEY_STEP)
 
@@ -324,6 +73,7 @@ class SpotlightDodge(Minigame):
         self.target_u = min(1.0, self.target_u + KEY_STEP)
 
     def handle_event(self, event: pygame.event.Event) -> None:
+        super().handle_event(event)
         if event.type != pygame.KEYDOWN:
             return
         left, right = self.actions
@@ -331,18 +81,14 @@ class SpotlightDodge(Minigame):
             left.perform()
         elif event.key in (pygame.K_d, pygame.K_RIGHT):
             right.perform()
-        elif event.key == pygame.K_c:  # recentre: "my current pose is straight ahead"
-            ratio = self.tracker.ratio if self.tracker.available else None
-            if ratio is not None:
-                self.neutral = ratio
 
-    # --------------------------------------------------------------- update
+    # Update state
     def update(self, dt: float) -> None:
         if self.finished:
             return
 
         if self.mode == "calibrate":
-            self._update_calibration(dt)
+            self.update_calibration(dt)
             self._move_player(dt)
             return
 
@@ -357,27 +103,11 @@ class SpotlightDodge(Minigame):
         elif self.elapsed >= SURVIVE_SECONDS:
             self.finish(True)
 
-    def _update_calibration(self, dt: float) -> None:
-        self.wait_time += dt
-        ratio = self.tracker.ratio if self.tracker.available else None
-        if ratio is not None:
-            self.samples.append(ratio)
-            self.calib_time += dt
-
-        done = self.calib_time >= CALIBRATE_SECONDS and len(self.samples) >= 10
-        if done or self.wait_time > CALIBRATE_TIMEOUT or not self.tracker.available:
-            if self.samples:
-                self.neutral = median(self.samples)
-            self.mode = "play"
-
     def _update_control(self) -> None:
-        ratio = self.tracker.ratio if self.tracker.available else None
-        self.face_visible = ratio is not None
-        if ratio is None:
+        offsets = self.read_offsets()
+        if offsets is None:
             return  # face lost (or keyboard only): keep current target
-        if self.neutral is None:
-            self.neutral = ratio  # camera found us late: calibrate on first sight
-        off = max(-1.0, min(1.0, (ratio - self.neutral) / self.tracker.scale))
+        off = max(-1.0, min(1.0, offsets[0]))
         if abs(off) < DEAD_ZONE:
             off = 0.0
         else:
@@ -433,7 +163,7 @@ class SpotlightDodge(Minigame):
         else:
             self.exposure = max(0.0, self.exposure - dt / EXPOSURE_DOWN_TIME)
 
-    # ----------------------------------------------------------------- draw
+    # Draw the scene
     def draw(self, screen: pygame.Surface) -> None:
         w, h = screen.get_size()
         ground_y = h - 110
@@ -499,79 +229,19 @@ class SpotlightDodge(Minigame):
 
         # detection meter
         bx, by, bw, bh = w // 2 - 100, 14, 200, 12
-        pygame.draw.rect(screen, (50, 50, 60), (bx, by, bw, bh), border_radius=4)
-        pygame.draw.rect(screen, (230, 60, 60), (bx, by, int(bw * self.exposure), bh), border_radius=4)
+        draw_bar(screen, (bx, by, bw, bh), self.exposure, (230, 60, 60))
         label = self.small_font.render("DETECTION", True, (200, 200, 200))
         screen.blit(label, (w // 2 - label.get_width() // 2, by + bh + 4))
 
-        # camera preview
-        preview = self.tracker.preview_surface() if self.tracker.available else None
-        if preview is not None:
-            pw, ph = preview.get_size()
-            pos = (w - pw - 10, 10)
-            screen.blit(preview, pos)
-            pygame.draw.rect(screen, (200, 200, 200), (*pos, pw, ph), 2)
+        draw_camera_preview(screen, self.tracker)
 
         if self.tracker.available:
             info = f"Head tracking: {self.tracker.backend}   (C = recentre)"
         else:
             info = "No camera tracking - keyboard: A/D or arrows"
-        screen.blit(self.small_font.render(info, True, (140, 140, 160)), (10, h - 28))
+        draw_status_line(screen, self.small_font, info)
 
         if self.mode == "calibrate":
-            text = self.font.render("Look straight at the camera...", True, (240, 240, 240))
-            screen.blit(text, ((w - text.get_width()) // 2, h // 2 - 80))
-            frac = min(1.0, self.calib_time / CALIBRATE_SECONDS)
-            pygame.draw.rect(screen, (50, 50, 60), (w // 2 - 120, h // 2 - 40, 240, 12), border_radius=4)
-            pygame.draw.rect(screen, (80, 200, 120),
-                             (w // 2 - 120, h // 2 - 40, int(240 * frac), 12), border_radius=4)
-        elif self.tracker.available and not self.face_visible:
-            text = self.font.render("Face lost!", True, (255, 160, 60))
-            screen.blit(text, ((w - text.get_width()) // 2, h // 2 - 20))
-
-
-# =============================================================================
-# Demo runner
-# =============================================================================
-def main() -> None:
-    pygame.init()
-    screen = pygame.display.set_mode((960, 540))
-    pygame.display.set_caption("Dodge the Spotlight")
-    clock = pygame.time.Clock()
-    big = pygame.font.Font(None, 80)
-    small = pygame.font.Font(None, 32)
-
-    game = SpotlightDodge(screen)
-    running = True
-    while running:
-        dt = clock.tick(60) / 1000.0
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
-                running = False
-            elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE and game.finished:
-                game.start()
-            else:
-                game.handle_event(event)
-
-        game.update(dt)
-        game.draw(screen)
-
-        if game.finished:
-            shade = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
-            shade.fill((0, 0, 0, 150))
-            screen.blit(shade, (0, 0))
-            msg, col = ("YOU SURVIVED!", (90, 230, 120)) if game.won else ("CAUGHT!", (240, 70, 70))
-            text = big.render(msg, True, col)
-            hint = small.render("Press SPACE to play again", True, (230, 230, 230))
-            cx, cy = screen.get_width() // 2, screen.get_height() // 2
-            screen.blit(text, (cx - text.get_width() // 2, cy - 50))
-            screen.blit(hint, (cx - hint.get_width() // 2, cy + 20))
-
-        pygame.display.flip()
-
-    game.close()
-    pygame.quit()
-
-
-if __name__ == "__main__":
-    main()
+            self.draw_calibration(screen)
+        else:
+            self.draw_face_lost(screen, h // 2)

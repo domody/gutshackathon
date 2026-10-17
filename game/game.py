@@ -1,6 +1,8 @@
+import random
+
 import pygame
 
-from game.games import Dalgona
+from game.games import Dalgona, RedLightGreenLight, SpotlightDodge, simonsays
 from game.menu import Menu, MenuItem
 from game.minigame import Minigame
 from game.settings import Settings
@@ -20,6 +22,8 @@ class Game:
         pygame.display.set_caption(self.settings.title)
         self.clock = pygame.time.Clock()
         self.running = False
+        self.minigames: list[type[Minigame]] = [Dalgona, RedLightGreenLight, simonsays, SpotlightDodge]
+        self.remaining: list[type[Minigame]] = []
         self.minigame: Minigame | None = None
         self.menu = Menu(
             self.settings.title,
@@ -31,7 +35,16 @@ class Game:
         )
 
     def start_game(self) -> None:
-        self.minigame = Dalgona(self.screen)
+        self.remaining = self.minigames.copy()
+        self.next_minigame()
+
+    def next_minigame(self) -> None:
+        """Start a random remaining minigame, or return to the menu when none are left."""
+        if not self.remaining:
+            self.minigame = None
+            return
+        cls = self.remaining.pop(random.randrange(len(self.remaining)))
+        self.minigame = cls(self.screen)
         self.minigame.start()
 
     def tutorial(self) -> None:
@@ -63,7 +76,7 @@ class Game:
             self.minigame.update(dt)
             if self.minigame.finished:
                 self.minigame.close()
-                self.minigame = None
+                self.next_minigame()
 
     def draw(self) -> None:
         self.screen.fill(self.settings.background)
