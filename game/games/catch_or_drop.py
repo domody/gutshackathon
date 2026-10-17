@@ -12,11 +12,11 @@ from game.ui import draw_camera_preview, draw_status_line, draw_text_centered
 
 TARGET_OBJECTS = 10
 LIVES = 3
-FALL_TIME = (1.65, 1.1)        # seconds from spawn to your hand, start -> end of round
-SPAWN_INTERVAL = (1.5, 0.9)    # seconds between objects, start -> end of round
-BAD_CHANCE = 0.4               # after the first two objects; never more than 2 in a row
-PALM_HOLD = 0.05               # palm must be shown this long inside the zone to catch
-FIST_HOLD = 0.05               # fist must be shown this long inside the zone to drop a bad item
+FALL_TIME = (1.65, 1.1)  # Seconds from spawn to the catch zone, from the first item to the last.
+SPAWN_INTERVAL = (1.5, 0.9)  # Seconds between spawns, from the first item to the last.
+BAD_CHANCE = 0.4  # Chance of a bad item after the first two; never allow more than two in a row.
+PALM_HOLD = 0.05  # Seconds an open palm must be held in the zone to catch an item.
+FIST_HOLD = 0.05  # Seconds a fist must be held in the zone to drop a bad item.
 READY_SECONDS = 3.5
 FLASH_SECONDS = 0.7
 OBJ_R = 34
@@ -50,7 +50,7 @@ class Item:
     palm_t: float = 0.0
     fist_t: float = 0.0
     judged: bool = False
-    state: str = "falling"   # falling | caught | gone
+    state: str = "falling"  # Item state: falling, caught or gone.
     fade: float = 0.0
 
 
@@ -85,7 +85,7 @@ class CatchOrDrop(Minigame):
         self.spawned = 0
         self.resolved = 0
         self.bad_run = 0
-        self.spawn_timer = 99.0     # spawn the first object as soon as play starts
+        self.spawn_timer = 99.0  # Start high so the first item spawns on the first update.
         self.items: list[Item] = []
         self.particles: list[list] = []
 
@@ -97,14 +97,14 @@ class CatchOrDrop(Minigame):
         self.flash_text = ""
         self.flash_color = GOOD_COLOR
 
-    # ------------------------------------------------------------- geometry
+    # Geometry used by drawing and collision checks.
     def _geom(self) -> tuple[int, int, int, int, int]:
         """(width, hand_y, zone_top, zone_bottom, ground_y)"""
         w, h = self.screen.get_size()
         hand_y = h - 120
         return w, hand_y, hand_y - 150, hand_y - 20, hand_y + 70
 
-    # --------------------------------------------------------------- update
+    # Advance the round and resolve item interactions.
     def update(self, dt: float) -> None:
         if self.finished:
             return
@@ -202,7 +202,7 @@ class CatchOrDrop(Minigame):
         self.lives -= 1
         self.flash_text, self.flash_color, self.flash_t = text, BAD_COLOR, FLASH_SECONDS
 
-    # ------------------------------------------------------------ particles
+    # Create and update visual particles.
     def _burst(self, x: float, y: float, color: tuple[int, int, int], count: int, speed: float) -> None:
         for _ in range(count):
             angle = random.uniform(0, math.tau)
@@ -218,14 +218,14 @@ class CatchOrDrop(Minigame):
             p[4] -= dt
         self.particles = [p for p in self.particles if p[4] > 0]
 
-    # ----------------------------------------------------------------- draw
+    # Draw the game scene and interface.
     def draw(self, screen: pygame.Surface) -> None:
         w, hand_y, zone_top, zone_bot, ground_y = self._geom()
         h = screen.get_height()
         screen.fill(BG)
         pygame.draw.rect(screen, FLOOR, (0, ground_y, w, h - ground_y))
 
-        # catch zone: brightens while an object you still need to deal with is inside it
+        # Highlight the catch zone while an item still needs a decision.
         active = any(not it.judged and zone_top <= it.y <= zone_bot for it in self.items)
         if self._overlay is None or self._overlay.get_size() != (w, h):
             self._overlay = pygame.Surface((w, h), pygame.SRCALPHA)

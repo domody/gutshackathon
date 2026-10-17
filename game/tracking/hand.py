@@ -18,18 +18,17 @@ HAND_MODEL_URL = (
 )
 HAND_MODEL_PATH = os.path.join(MODELS_DIR, "hand_landmarker.task")
 
-# Hand landmark ids
+# Hand landmark IDs used by MediaPipe.
 WRIST, THUMB_TIP, INDEX_TIP, MIDDLE_MCP = 0, 4, 8, 9
 
-PINCH_ON = 0.30            # thumb-index gap / palm size to start a pinch
-PINCH_OFF = 0.45           # ...and to release it (hysteresis)
-FRAME_MARGIN = 0.01        # camera border that maps to the screen edge
+PINCH_ON = 0.30  # Thumb-index gap divided by palm size required to start a pinch.
+PINCH_OFF = 0.45  # Larger release threshold prevents the pinch reading from flickering.
+FRAME_MARGIN = 0.01  # Camera border excluded when mapping hand position to the screen.
 
-# (fingertip id, knuckle id, "extended" threshold). Tip-to-knuckle distance over palm size
-# is ~1.0 for a straight finger and ~0.4 when curled.
+# Each finger uses (fingertip ID, knuckle ID, extension ratio); straight fingers are near 1.0 and curled fingers near 0.4.
 FINGERS = ((8, 5, 0.80), (12, 9, 0.85), (16, 13, 0.80), (20, 17, 0.62))
 CURLED_RATIO = 0.55
-VOTE_FRAMES = 5            # a gesture must win 3 of the last 5 frames: kills flicker
+VOTE_FRAMES = 5  # Require a gesture in 3 of 5 frames to reduce flicker.
 VOTES_NEEDED = 3
 
 

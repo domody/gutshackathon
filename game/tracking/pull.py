@@ -16,9 +16,9 @@ from game.tracking.body import LEFT_SHOULDER, POSE_MODEL_PATH, POSE_MODEL_URL, R
 from game.tracking.camera import CameraTracker, ensure_model, mp
 from game.tracking.hand import HAND_MODEL_PATH, HAND_MODEL_URL
 
-MIN_SHOULDER_WIDTH = 0.055   # smaller than this and the player is too far away
-POSE_INTERVAL = 4            # run the pose model every Nth frame
-FINGER_PAIRS = ((8, 6), (12, 10), (16, 14), (20, 18))   # (tip, pip)
+MIN_SHOULDER_WIDTH = 0.055  # Reject smaller widths because the player is too far from the camera.
+POSE_INTERVAL = 4  # Run the pose model once every four camera frames.
+FINGER_PAIRS = ((8, 6), (12, 10), (16, 14), (20, 18))  # Landmark ID pairs: fingertip and middle finger joint.
 HAND_MARKS = (0, 5, 8, 9, 12, 13, 16, 17, 20)
 
 

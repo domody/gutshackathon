@@ -22,7 +22,7 @@ class Minigame(ABC):
     """Base class for minigames. Subclasses implement the logic and expose two actions."""
 
     title: str = "Minigame"
-    tracker_cls: type[CameraTracker] | None = None  # set to use the camera
+    tracker_cls: type[CameraTracker] | None = None  # Set this to enable camera tracking.
 
     def __init__(self, screen: pygame.Surface, tracker: CameraTracker | None = None) -> None:
         self.screen = screen
@@ -34,7 +34,7 @@ class Minigame(ABC):
         self.small_font = pygame.font.Font(None, 24)
         self.big_font = pygame.font.Font(None, 72)
 
-        # Pass a shared tracker in if several minigames use the camera.
+        # A shared tracker can be passed in when minigames use the same camera.
         self.tracker = tracker
         self._owns_tracker = False
         if self.tracker_cls is not None:

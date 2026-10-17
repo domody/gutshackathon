@@ -15,7 +15,7 @@ class Game:
         self.settings = settings or Settings()
         pygame.init()
         if self.settings.fullscreen:
-            # (0, 0) uses the desktop resolution
+            # A size of (0, 0) selects the desktop resolution.
             self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
         else:
             self.screen = pygame.display.set_mode(self.settings.window_size)
@@ -97,7 +97,7 @@ class Game:
         if self.ui.active:
             self.ui.update(dt)
             if self.ui.leaving and self.minigame:
-                self.minigame.update(dt)  # runs under the fade-out
+                self.minigame.update(dt)  # Keep the game updating under the closing fade.
         elif self.minigame:
             self.minigame.update(dt)
             if self.minigame.finished:

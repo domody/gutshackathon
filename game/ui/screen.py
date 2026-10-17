@@ -3,17 +3,17 @@ from abc import ABC, abstractmethod
 import pygame
 
 
-BLANK = (20, 20, 30)  # shared plain backdrop for result and intro screens
+BLANK = (20, 20, 30)  # Shared backdrop color for intro and result screens.
 
 
 class Screen(ABC):
     """A full-screen UI view (menu, intro, level cleared, ...)."""
 
-    fade_in = 0.0   # seconds; 0 shows instantly
+    fade_in = 0.0  # Seconds to fade in; zero shows the screen immediately.
     fade_out = 0.0
-    background: tuple[int, int, int] | None = None  # opaque backdrop behind the content
+    background: tuple[int, int, int] | None = None  # Optional opaque color behind the screen content.
 
-    overlay = False  # draws over the live game instead of a backdrop
+    overlay = False  # Draw this screen over the live game instead of a backdrop.
 
     def on_enter(self) -> None:
         """Called when the screen becomes active."""

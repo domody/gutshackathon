@@ -26,26 +26,26 @@ from game.ui import draw_bar, draw_camera_preview, draw_status_line
 
 SURVIVE_SECONDS = 15.0
 
-# Control
-DEAD_ZONE = 0.08            # ignore tiny head movements (fraction of full turn)
-PLAYER_SPEED = 2.0          # max player speed, screen-widths per second
+# Player movement
+DEAD_ZONE = 0.08  # Ignore head turns smaller than this fraction of a full turn.
+PLAYER_SPEED = 2.0  # Maximum player speed in screen widths per second.
 EDGE_MARGIN = 0.04
 PLAYER_HALF_W = 16
 
-# Manager's line of sight
-BEAM_HALF_W = 0.11          # sight-cone half-width, fraction of screen width
+# Manager line of sight
+BEAM_HALF_W = 0.11  # Half-width of the sight cone as a fraction of screen width.
 WARN_SECONDS = 0.9
-EXPOSURE_UP_TIME = 0.18     # seconds in sight before you're volunteered
-EXPOSURE_DOWN_TIME = 0.6    # seconds to cool down when back out of sight
-MANAGER_Y = 112             # vertical position of the manager's head
-HAND_UP_AT = 0.5            # exposure level at which the player's hand starts creeping up
+EXPOSURE_UP_TIME = 0.18  # Seconds in the sight cone before the player is volunteered.
+EXPOSURE_DOWN_TIME = 0.6  # Seconds out of sight needed to clear exposure.
+MANAGER_Y = 112  # Vertical screen position of the manager's head.
+HAND_UP_AT = 0.5  # Exposure level at which the player's hand starts rising.
 
 BG = (18, 22, 34)
 WALL = (24, 29, 44)
 FLOOR = (34, 40, 58)
 PARTITION = (30, 36, 54)
 
-# --- custom artwork ----------------------------------------------------------
+# Optional custom artwork.
 ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 MANAGER_SPRITE_H = 96
 EMPLOYEE_SPRITE_H = 84
@@ -80,7 +80,7 @@ class DodgeTheManager(FaceMinigame):
         self.employee_hand_sprite = _load_sprite("employee_volunteered.png", EMPLOYEE_SPRITE_H)
         self.start()
 
-    # Public API
+    # Actions shown on the game intro screen.
     @property
     def actions(self) -> tuple[Action, Action]:
         return (
@@ -92,20 +92,20 @@ class DodgeTheManager(FaceMinigame):
         super().start()
         self.elapsed = 0.0
 
-        self.player_u = 0.5     # player position, 0..1 across the screen
+        self.player_u = 0.5  # Player's horizontal screen position, normalized from 0 to 1.
         self.target_u = 0.5
 
-        self.light_phase = "idle"   # idle -> warn -> sweep -> idle ...
+        self.light_phase = "idle"  # Manager state: idle, warn or sweep.
         self.light_t = 0.0
         self.idle_dur = 0.8
-        self.side = -1              # -1: manager enters from left, +1: from right
-        self.reach = 0.6            # how far the manager gets (0..1)
+        self.side = -1  # Sweep direction: -1 enters from left, +1 enters from right.
+        self.reach = 0.6  # Maximum sweep distance from the entry edge, as a screen fraction.
         self.sweep_dur = 2.4
         self.beam_u: float | None = None
         self.exposure = 0.0
         self.lit = False
 
-    # Update state
+    # Update player movement and the manager's search.
     def update(self, dt: float) -> None:
         if self.finished:
             return
@@ -129,7 +129,7 @@ class DodgeTheManager(FaceMinigame):
     def _update_control(self) -> None:
         offsets = self.read_offsets()
         if offsets is None:
-            return  # face lost: keep current target
+            return  # Keep the last position until the face is visible again.
         off = max(-1.0, min(1.0, offsets[0]))
         if abs(off) < DEAD_ZONE:
             off = 0.0
@@ -145,7 +145,7 @@ class DodgeTheManager(FaceMinigame):
 
     def _begin_warn(self) -> None:
         progress = min(1.0, self.elapsed / SURVIVE_SECONDS)
-        # Usually enter from the side the player is on, forcing them to cross.
+        # Usually enter from the player's side so they must cross the screen to escape.
         on_side = -1 if self.player_u < 0.5 else 1
         self.side = on_side if random.random() < 0.7 else -on_side
         self.reach = random.uniform(0.50 + 0.10 * progress, 0.68 + 0.12 * progress)
@@ -169,7 +169,7 @@ class DodgeTheManager(FaceMinigame):
                 self.idle_dur = random.uniform(0.4, 0.8)
                 self.beam_u = None
             else:
-                lead = self.reach * math.sin(math.pi * p)  # out and back
+                lead = self.reach * math.sin(math.pi * p)  # Move the sight cone outward and back.
                 if self.side < 0:
                     self.beam_u = lead - BEAM_HALF_W
                 else:
@@ -186,7 +186,7 @@ class DodgeTheManager(FaceMinigame):
         else:
             self.exposure = max(0.0, self.exposure - dt / EXPOSURE_DOWN_TIME)
 
-    # Draw the scene
+    # Draw the office, manager and player.
     def draw(self, screen: pygame.Surface) -> None:
         w, h = screen.get_size()
         ground_y = h - 110
@@ -213,7 +213,7 @@ class DodgeTheManager(FaceMinigame):
             cx, hw = int(self.beam_u * w), int(BEAM_HALF_W * w)
             floor_c = ground_y + 55
             top = ground_y - 40
-            # cone of sight from the manager's eyes down to the floor
+            # Draw the manager's sight cone from their eyes to the floor.
             pygame.draw.polygon(overlay, (255, 235, 150, 70), [
                 (cx - 14, MANAGER_Y), (cx + 14, MANAGER_Y), (cx + hw, top),
                 (cx + hw, floor_c), (cx - hw, floor_c), (cx - hw, top)])
@@ -240,15 +240,15 @@ class DodgeTheManager(FaceMinigame):
             sp = self.manager_sprite
             screen.blit(sp, (cx - sp.get_width() // 2, y - sp.get_height() // 2))
         else:
-            pygame.draw.rect(screen, (50, 55, 80), (cx - 22, y + 10, 44, 46), border_radius=8)   # suit
-            pygame.draw.polygon(screen, (235, 235, 240), [(cx - 8, y + 10), (cx + 8, y + 10), (cx, y + 26)])  # shirt
-            pygame.draw.polygon(screen, (200, 50, 60), [(cx - 4, y + 14), (cx + 4, y + 14), (cx + 3, y + 40), (cx, y + 44), (cx - 3, y + 40)])  # tie
-            pygame.draw.circle(screen, (235, 190, 160), (cx, y - 6), 20)                          # head
+            pygame.draw.rect(screen, (50, 55, 80), (cx - 22, y + 10, 44, 46), border_radius=8)  # Draw the suit.
+            pygame.draw.polygon(screen, (235, 235, 240), [(cx - 8, y + 10), (cx + 8, y + 10), (cx, y + 26)])  # Draw the shirt.
+            pygame.draw.polygon(screen, (200, 50, 60), [(cx - 4, y + 14), (cx + 4, y + 14), (cx + 3, y + 40), (cx, y + 44), (cx - 3, y + 40)])  # Draw the tie.
+            pygame.draw.circle(screen, (235, 190, 160), (cx, y - 6), 20)  # Draw the head.
             pygame.draw.circle(screen, (20, 20, 30), (cx, y - 6), 20, 3)
-            pygame.draw.rect(screen, (30, 30, 40), (cx - 15, y - 12, 12, 8), 2, border_radius=2)  # glasses
+            pygame.draw.rect(screen, (30, 30, 40), (cx - 15, y - 12, 12, 8), 2, border_radius=2)  # Draw the glasses.
             pygame.draw.rect(screen, (30, 30, 40), (cx + 3, y - 12, 12, 8), 2, border_radius=2)
             pygame.draw.line(screen, (30, 30, 40), (cx - 3, y - 8), (cx + 3, y - 8), 2)
-            pygame.draw.line(screen, (120, 60, 50), (cx - 6, y + 4), (cx + 6, y + 4), 2)           # mouth
+            pygame.draw.line(screen, (120, 60, 50), (cx - 6, y + 4), (cx + 6, y + 4), 2)  # Draw the mouth.
 
         if speaking:
             text = self.small_font.render("Any volunteers?", True, (30, 30, 40))
@@ -287,15 +287,15 @@ class DodgeTheManager(FaceMinigame):
         if sprite is not None:
             screen.blit(sprite, (px - sprite.get_width() // 2, ground_y + 30 - sprite.get_height()))
         else:
-            # shirt shifts from calm green to alarmed red as you get spotted
+            # Shift the shirt from green to red as exposure rises.
             color = (80 + int(175 * e), 200 - int(130 * e), 120 - int(80 * e))
             pygame.draw.rect(screen, color, (px - PLAYER_HALF_W, ground_y - 14, PLAYER_HALF_W * 2, 44),
                              border_radius=8)
-            pygame.draw.polygon(screen, (40, 50, 90), [(px - 3, ground_y - 12), (px + 3, ground_y - 12), (px, ground_y + 10)])  # tie
+            pygame.draw.polygon(screen, (40, 50, 90), [(px - 3, ground_y - 12), (px + 3, ground_y - 12), (px, ground_y + 10)])  # Draw the tie.
             pygame.draw.circle(screen, (235, 190, 160), (px, ground_y - 30), 14)
             pygame.draw.circle(screen, (20, 20, 30), (px, ground_y - 30), 14, 2)
             if e >= HAND_UP_AT:
-                # the hand creeps up on its own: you're about to be volunteered
+                # Raise the player's hand as exposure approaches a loss.
                 lift = (e - HAND_UP_AT) / (1 - HAND_UP_AT)
                 hand_y = ground_y - 10 - int(46 * lift)
                 pygame.draw.line(screen, color, (px + PLAYER_HALF_W - 2, ground_y - 6), (px + 13, hand_y), 6)
@@ -308,7 +308,7 @@ class DodgeTheManager(FaceMinigame):
         remaining = max(0.0, SURVIVE_SECONDS - self.elapsed)
         screen.blit(self.font.render(f"{remaining:.1f}s", True, (240, 240, 240)), (10, 10))
 
-        # volunteered meter
+        # Show how close the player is to being volunteered.
         bx, by, bw, bh = w // 2 - 100, 14, 200, 12
         draw_bar(screen, (bx, by, bw, bh), self.exposure, (230, 60, 60))
         label = self.small_font.render("VOLUNTEERED", True, (200, 200, 200))

@@ -21,7 +21,7 @@ FACE_MODEL_URL = (
 )
 FACE_MODEL_PATH = os.path.join(MODELS_DIR, "face_landmarker.task")
 
-NOSE_TIP, CHEEK_A, CHEEK_B = 1, 234, 454   # FaceMesh landmark ids
+NOSE_TIP, CHEEK_A, CHEEK_B = 1, 234, 454  # MediaPipe face landmark IDs used for pose.
 
 
 class FaceTracker(CameraTracker):
@@ -29,7 +29,7 @@ class FaceTracker(CameraTracker):
 
     def __init__(self, camera_index: int = 0) -> None:
         super().__init__(camera_index)
-        self.scale = 0.14  # yaw-ratio change that maps to "full turn"
+        self.scale = 0.14  # Yaw-ratio change that represents a full head turn.
 
         self._ratio: float | None = None
         self._roll = 0.0
@@ -39,7 +39,7 @@ class FaceTracker(CameraTracker):
         self._landmarker = None
         self._cascade = None
 
-    # Backend setup and detection
+    # Set up the available face detector.
     def _setup(self) -> bool:
         ok = self._init_mesh() or self._init_tasks() or self._init_haar()
         if ok and not self.has_roll:
@@ -96,7 +96,7 @@ class FaceTracker(CameraTracker):
                 detector.close()
         self._mesh = self._landmarker = None
 
-    # Measure from detections
+    # Convert detector output into head-pose measurements.
     @staticmethod
     def _mesh_pose(pts, w: int, h: int):
         """Yaw ratio = nose position projected onto the cheek-to-cheek axis, so it
@@ -153,7 +153,7 @@ class FaceTracker(CameraTracker):
                 self._pose_time = now
         return marks
 
-    # Read tracked values
+    # Expose the latest head-pose measurements.
     @property
     def has_roll(self) -> bool:
         """False for the Haar fallback, which can't measure head tilt."""

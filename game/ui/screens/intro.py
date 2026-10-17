@@ -22,7 +22,7 @@ class MinigameIntro(Screen):
     BUTTON_HOVER = (110, 230, 150)
     BUTTON_TEXT = (20, 20, 30)
 
-    OVERLAY_COLOR = (12, 12, 22, 185)  # ~72% dark over the game's first frame
+    OVERLAY_COLOR = (12, 12, 22, 185)  # Darken the first game frame by about 72 percent.
 
     fade_in = 0.4
     fade_out = 0.5

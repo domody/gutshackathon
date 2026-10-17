@@ -20,7 +20,7 @@ POSE_MODEL_URL = (
 )
 POSE_MODEL_PATH = os.path.join(MODELS_DIR, "pose_landmarker_lite.task")
 
-# Pose landmark ids
+# Pose landmark IDs used by MediaPipe.
 NOSE = 0
 LEFT_SHOULDER, RIGHT_SHOULDER = 11, 12
 LEFT_ELBOW, RIGHT_ELBOW = 13, 14
@@ -32,7 +32,7 @@ TRACKED_IDS = (LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_ELBOW, RIGHT_ELBOW, LEFT_WRIS
 MARK_IDS = (NOSE, *TRACKED_IDS)
 
 VISIBILITY_THRESHOLD = 0.48
-MIN_SHOULDER_WIDTH = 0.055   # smaller than this and the player is too far away
+MIN_SHOULDER_WIDTH = 0.055  # Reject smaller widths because the player is too far from the camera.
 
 
 def landmark_visible(point) -> bool:
@@ -59,7 +59,7 @@ class BodyTracker(CameraTracker):
         self._hands = False
         self._time = 0.0
 
-    # Backend setup and detection
+    # Set up the available pose detector.
     def _setup(self) -> bool:
         return self._init_pose() or self._init_tasks()
 
@@ -106,7 +106,7 @@ class BodyTracker(CameraTracker):
                 detector.close()
         self._pose = self._landmarker = None
 
-    # Measure from detections
+    # Convert detector output into body measurements.
     def _detect(self, frame_bgr):
         rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         if self.backend == "mediapipe-pose":
@@ -132,7 +132,7 @@ class BodyTracker(CameraTracker):
         marks = [(pts[i].x, pts[i].y) for i in MARK_IDS if landmark_visible(pts[i])]
         width = math.dist((pts[LEFT_SHOULDER].x, pts[LEFT_SHOULDER].y),
                           (pts[RIGHT_SHOULDER].x, pts[RIGHT_SHOULDER].y))
-        # Head and shoulders show the player is there; hands may leave the frame.
+        # Require a visible head and shoulders, but allow hands to leave the frame.
         if width < MIN_SHOULDER_WIDTH or not all(landmark_visible(pts[i]) for i in BODY_IDS):
             self._lose()
             return marks
@@ -142,12 +142,12 @@ class BodyTracker(CameraTracker):
         motion = pump = 0.0
         dt = now - self._previous_time
         if self._previous is not None and 1 / 120 <= dt <= 0.2:
-            # Mean speed of the joints seen in both frames, in shoulder widths per second.
+            # Measure average shared-joint speed in shoulder widths per second.
             shared = [i for i in current if i in self._previous]
             if shared:
                 motion = sum(math.dist(current[i], self._previous[i]) for i in shared) \
                     / len(shared) / width / dt
-            # Pumping = wrists moving vertically in opposite directions.
+            # Count opposite vertical wrist movement as arm pumping.
             if hands and all(i in self._previous for i in HAND_IDS):
                 left = (current[LEFT_WRIST][1] - self._previous[LEFT_WRIST][1]) / dt
                 right = (current[RIGHT_WRIST][1] - self._previous[RIGHT_WRIST][1]) / dt
@@ -162,7 +162,7 @@ class BodyTracker(CameraTracker):
             self._width, self._hands, self._time = width, hands, now
         return marks
 
-    # Read tracked values
+    # Expose the latest body measurements.
     @property
     def body(self) -> tuple[float, float, float, bool] | None:
         """(pump, motion, shoulder_width, hands_visible), or None if no body seen recently."""

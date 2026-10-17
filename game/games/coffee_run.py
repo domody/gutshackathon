@@ -27,18 +27,18 @@ from game.tracking import FaceTracker
 from game.ui import draw_bar, draw_camera_preview, draw_status_line, draw_text_centered
 
 
-DURATION = 16.0              # seconds to carry the coffee
+DURATION = 16.0  # Seconds the player must carry the coffee.
 READY_SECONDS = 1.5
 
-# Hand wobble (the hand drifts and gets jolted; tilt your head to correct it)
-HEAD_GAIN = 1.6              # hand degrees per head degree
-SAFE_ROLL = 21.0             # degrees of lean before coffee slops out
-SAFE_YAW = 0.5               # only used to draw the rim
+# Cup motion combines automatic wobble with head tilt to balance the coffee.
+HEAD_GAIN = 1.6  # Cup tilt degrees added per degree of head tilt.
+SAFE_ROLL = 21.0  # Maximum cup tilt before coffee spills.
+SAFE_YAW = 0.5  # Fixed perspective offset used when drawing the cup rim.
 WOBBLE_ROLL = 36.0
 JOLT_EVERY = (2.5, 4.0)
 JOLT_SIZE = (6.0, 10.0)
-SPILL_RATE = 0.18            # coffee lost per second just past the edge
-SPILL_SPEED_UP = 0.5         # extra spill per unit of overshoot
+SPILL_RATE = 0.18  # Coffee lost per second just beyond the safe tilt.
+SPILL_SPEED_UP = 0.5  # Additional spill rate per unit beyond the safe tilt.
 
 BG = (28, 22, 30)
 FLOOR = (44, 34, 40)
@@ -71,7 +71,7 @@ class CoffeeRun(FaceMinigame):
         super().__init__(screen, tracker)
         self.start()
 
-    # Public API
+    # Actions shown on the game intro screen.
     @property
     def actions(self) -> tuple[Action, Action]:
         return (
@@ -86,19 +86,19 @@ class CoffeeRun(FaceMinigame):
         self.coffee = 1.0
         self.spilled = 0.0
 
-        self.you_roll = 0.0     # head tilt (target)
-        self.vis_roll = 0.0     # head tilt (smoothed)
+        self.you_roll = 0.0  # Current head-tilt target.
+        self.vis_roll = 0.0  # Smoothed head tilt used to draw the player.
 
-        self.lean_roll = 0.0    # resulting hand lean
+        self.lean_roll = 0.0  # Combined cup lean from wobble, jolts and head movement.
         self.lean_yaw = 0.0
         self.phases = [random.uniform(0, math.tau) for _ in range(2)]
         self.freqs = [random.uniform(0.45, 0.7), random.uniform(0.9, 1.3)]
         self.jolt_roll = 0.0
         self.jolt_t = random.uniform(*JOLT_EVERY)
-        self.drops: list[list[float]] = []   # x, y, vx, vy, life
+        self.drops: list[list[float]] = []  # Spill particles as x, y, horizontal speed, vertical speed and lifetime.
         self.drop_acc = 0.0
 
-    # Update state
+    # Update the cup, spill and round state.
     def update(self, dt: float) -> None:
         if self.finished:
             return
@@ -135,7 +135,7 @@ class CoffeeRun(FaceMinigame):
 
         yaw_off, roll_off = offsets
         if not (not self.tracker.available or self.tracker.has_roll):
-            roll_off = yaw_off * 30.0   # tracker can't see tilt: turning works instead
+            roll_off = yaw_off * 30.0  # Approximate tilt from head turn when the tracker cannot detect roll.
         self.you_roll = max(-30.0, min(30.0, roll_off))
 
     def _update_lean(self, dt: float) -> None:
@@ -190,7 +190,7 @@ class CoffeeRun(FaceMinigame):
             d[4] -= dt
         self.drops = [d for d in self.drops if d[4] > 0 and d[1] < self.screen.get_height()]
 
-    # Draw the scene
+    # Draw the cup, player and interface.
     def _pivot(self, w: int, h: int) -> tuple[int, int]:
         return int(w * 0.42), int(h * 0.70)
 
@@ -213,7 +213,7 @@ class CoffeeRun(FaceMinigame):
         def P(x: float, y: float) -> tuple[int, int]:
             return int(r + x * s), int(r + y * s)
 
-        # cup body, level of coffee inside, rim ellipse foreshortened by forward/back lean
+        # Draw the cup and coffee level, compressing the rim ellipse with forward or backward lean.
         top_y, bot_y = -250, -90
         top_w, bot_w = 66, 48
         openness = max(0.12, min(0.9, 0.45 + 0.42 * yaw / SAFE_YAW * 0.6))
@@ -224,7 +224,7 @@ class CoffeeRun(FaceMinigame):
         pygame.draw.polygon(surf, CUP_SHADE, [P(top_w * 0.45, top_y), P(top_w, top_y),
                                               P(bot_w, bot_y), P(bot_w * 0.45, bot_y)])
 
-        # coffee surface is kept level in the world, so it slides against the cup frame
+        # Keep the coffee level relative to the screen so it shifts inside the tilted cup.
         level = max(0.0, self.coffee)
         cof_y = bot_y + (top_y - bot_y) * (0.15 + 0.78 * level)
         frac = (cof_y - bot_y) / (top_y - bot_y)
@@ -242,7 +242,7 @@ class CoffeeRun(FaceMinigame):
         rim.center = P(0, top_y)
         pygame.draw.ellipse(surf, DARK, rim, max(3, int(5 * s)))
 
-        # palm cradling the base, thumb up the side, fingers wrapped across the front
+        # Draw the hand under the cup, with the thumb at the side and fingers across the front.
         palm = pygame.Rect(0, 0, int(130 * s), int(100 * s))
         palm.center = P(0, -50)
         pygame.draw.ellipse(surf, SKIN, palm)
@@ -271,7 +271,7 @@ class CoffeeRun(FaceMinigame):
         px, py = self._pivot(w, h)
         self._draw_arm(screen, px, py, s)
 
-        # coffee puddle
+        # Draw the coffee spilled on the floor.
         if self.spilled > 0:
             pw = int(min(1.0, self.spilled) * 420 * s)
             pud = pygame.Rect(0, 0, pw, max(4, pw // 6))
@@ -293,7 +293,7 @@ class CoffeeRun(FaceMinigame):
 
         self._draw_gauge(screen, int(w * 0.78), int(h * 0.45), int(95 * s))
 
-        # coffee left (side bar) and delivery progress (bottom bar)
+        # Show remaining coffee at the side and delivery progress along the bottom.
         cx, cy, cw, ch = int(w * 0.12), int(h * 0.22), 26, int(h * 0.42)
         draw_text_centered(screen, self.font, "COFFEE", (240, 240, 240), (cx + cw // 2, cy - 22))
         self._draw_coffee_bar(screen, cx, cy, cw, ch)
@@ -313,7 +313,7 @@ class CoffeeRun(FaceMinigame):
 
     def _draw_gauge(self, screen: pygame.Surface, cx: int, cy: int, r: int) -> None:
         """Level gauge: dot leaves the green ring and the coffee spills."""
-        full = r * 1.4                       # gauge covers 1.4x the safe zone
+        full = r * 1.4  # Outer gauge radius is 1.4 times the safe tilt radius.
         pygame.draw.circle(screen, (40, 36, 52), (cx, cy), int(full))
         pygame.draw.circle(screen, GOOD, (cx, cy), r, 3)
         pygame.draw.line(screen, (80, 76, 96), (cx - int(full), cy), (cx + int(full), cy), 1)

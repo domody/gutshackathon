@@ -13,21 +13,21 @@ from game.ui import draw_bar, draw_camera_preview, draw_status_line, draw_text_c
 
 TARGET_COMMANDS = 8
 
-# Time per command ramps from START to END over the round.
+# Command time decreases from its starting value to its ending value over the round.
 TIME_START, TIME_END = 2.6, 1.6
 FAST_TIME_START, FAST_TIME_END = 1.9, 1.2
-COMBO_TIME_FACTOR = 0.85     # combo gets (poses x base x this) seconds
-HOLD_TIME = 0.30             # how long a pose must be held to count
+COMBO_TIME_FACTOR = 0.85  # Multiplier applied to the total time for a pose combo.
+HOLD_TIME = 0.30  # Seconds a pose must be held to count.
 FAST_HOLD_TIME = 0.22
-OPPOSITE_CHANCE = 0.4        # chance a command is "opposite" (once enabled, after 2 commands)
+OPPOSITE_CHANCE = 0.4  # Chance to reverse a command after the first two commands.
 
-# Pose detection (relative to the calibrated neutral)
-YAW_THRESH = 0.6             # fraction of a full turn (tracker.scale)
-TILT_THRESH = 14.0           # degrees
+# Pose thresholds are measured relative to the calibrated neutral position.
+YAW_THRESH = 0.6  # Yaw change as a fraction of the tracker's full-turn scale.
+TILT_THRESH = 14.0  # Minimum head tilt in degrees.
 
 READY_SECONDS = 1.0
 FLASH_SECONDS = 0.35
-# pose id -> (label, avatar yaw -1..1, avatar roll degrees)
+# Each pose maps to its label, avatar yaw from -1 to 1 and avatar roll in degrees.
 POSES = {
     "left": ("TURN LEFT", -1.0, 0.0),
     "right": ("TURN RIGHT", 1.0, 0.0),
@@ -37,7 +37,7 @@ POSES = {
 OPPOSITE = {"left": "right", "right": "left", "tilt_left": "tilt_right", "tilt_right": "tilt_left"}
 FLASH_WORDS = ("NICE!", "YES!", "GOOD!", "BOOM!", "SMOOTH!")
 
-# (attribute, label, description) for menus
+# Challenge setting name, display label and description.
 CHALLENGES = (
     ("fast", "Fast", "Shorter time for every command"),
     ("opposite", "Opposite", "Red commands: do the OPPOSITE pose"),
@@ -74,7 +74,7 @@ class simonsays(FaceMinigame):
         self.fast, self.opposite, self.combo = fast, opposite, combo
         self.start()
 
-    # Public API
+    # Actions shown on the game intro screen.
     @property
     def actions(self) -> tuple[Action, Action]:
         return (
@@ -88,9 +88,9 @@ class simonsays(FaceMinigame):
         self.done = 0
         self.ready_t = 0.0
 
-        self.current: str | None = None      # pose the player is doing right now
-        self.you_yaw = self.you_roll = 0.0   # live avatar target
-        self.vis_yaw = self.vis_roll = 0.0   # avatar as drawn (smoothed)
+        self.current: str | None = None  # Pose currently detected for the player.
+        self.you_yaw = self.you_roll = 0.0  # Target yaw and roll for the player's avatar.
+        self.vis_yaw = self.vis_roll = 0.0  # Smoothed yaw and roll used to draw the avatar.
 
         self.flash_t = 0.0
         self.flash_word = FLASH_WORDS[0]
@@ -101,10 +101,10 @@ class simonsays(FaceMinigame):
         self.time_left = self.time_limit = 1.0
         self._new_command()
 
-    # Command selection
+    # Choose poses and timing for each command.
     def _pose_pool(self) -> tuple[str, ...]:
         if self.tracker.available and not self.tracker.has_roll:
-            return ("left", "right")  # fallback tracker can't see tilt
+            return ("left", "right")  # This tracker cannot detect head tilt.
         return tuple(POSES)
 
     def _new_command(self) -> None:
@@ -117,7 +117,7 @@ class simonsays(FaceMinigame):
         required: list[str] = []
         prev = self.last_required
         for _ in range(count):
-            # never ask for the pose the player is probably already in
+            # Avoid asking for the pose the player most recently held.
             pick = random.choice([p for p in pool if p != prev])
             required.append(pick)
             prev = pick
@@ -132,7 +132,7 @@ class simonsays(FaceMinigame):
         self.time_limit = base * (1 if count == 1 else count * COMBO_TIME_FACTOR)
         self.time_left = self.time_limit
 
-    # Update state
+    # Update pose detection, command timing and progress.
     def update(self, dt: float) -> None:
         if self.finished:
             return
@@ -174,7 +174,7 @@ class simonsays(FaceMinigame):
         if self.current == required:
             self.hold += dt
         else:
-            self.hold = max(0.0, self.hold - 3.0 * dt)  # forgive a flicker
+            self.hold = max(0.0, self.hold - 3.0 * dt)  # Reduce the timer gradually to tolerate brief detection gaps.
 
         if self.hold >= (FAST_HOLD_TIME if self.fast else HOLD_TIME):
             self.idx += 1
@@ -194,7 +194,7 @@ class simonsays(FaceMinigame):
             self.time_left = 0.0
             self.finish(False)
 
-    # Draw the scene
+    # Draw the player, target poses and progress.
     def _draw_face(self, screen: pygame.Surface, cx: int, cy: int, r: int,
                    yaw: float, roll: float, color: tuple[int, int, int]) -> None:
         """Cartoon head. yaw -1..1 shifts the features, roll tilts the whole head."""
@@ -228,7 +228,7 @@ class simonsays(FaceMinigame):
 
         lx, rx, cy = int(w * 0.29), int(w * 0.72), 270
 
-        # --- you ---
+        # Draw the player's avatar.
         required = self.cmd["required"][min(self.idx, len(self.cmd["required"]) - 1)]
         matching = self.mode == "play" and self.current == required
         self._draw_face(screen, rx, cy, 100, self.vis_yaw, self.vis_roll, YOU_COLOR)
@@ -240,7 +240,7 @@ class simonsays(FaceMinigame):
             draw_text_centered(screen, self.big_font, "GET READY!", (240, 240, 240), (lx + 40, cy))
             return
 
-        # --- target pose(s) ---
+        # Draw the requested pose or pose sequence.
         shown, count = self.cmd["shown"], len(self.cmd["shown"])
         opposite = self.cmd["opposite"]
         radius = 100 if count == 1 else 72
@@ -261,14 +261,14 @@ class simonsays(FaceMinigame):
         if opposite and int(self.elapsed * 6) % 2 == 0:
             draw_text_centered(screen, self.big_font, "DO THE OPPOSITE!", (255, 90, 90), (w // 2, 85))
 
-        # "=" between the faces, slashed out when it's an opposite command
+        # Show whether the displayed pose matches or opposes the requested pose.
         mx = (lx + rx) // 2
         pygame.draw.line(screen, (230, 230, 230), (mx - 25, cy - 10), (mx + 25, cy - 10), 5)
         pygame.draw.line(screen, (230, 230, 230), (mx - 25, cy + 10), (mx + 25, cy + 10), 5)
         if opposite:
             pygame.draw.line(screen, (255, 90, 90), (mx - 30, cy + 32), (mx + 30, cy - 32), 6)
 
-        # --- hold meter under you, time bar along the bottom ---
+        # Show the hold meter under the player and the timer along the bottom.
         need = FAST_HOLD_TIME if self.fast else HOLD_TIME
         draw_bar(screen, (rx - 80, cy + 160, 160, 10), self.hold / need, DONE_COLOR)
 
