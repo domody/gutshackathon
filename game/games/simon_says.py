@@ -30,61 +30,6 @@ GREEN = (69, 173, 113)
 AMBER = (244, 177, 72)
 RED = (210, 78, 66)
 
-<<<<<<< HEAD
-# Command time decreases from its starting value to its ending value over the round.
-TIME_START, TIME_END = 2.6, 1.6
-FAST_TIME_START, FAST_TIME_END = 1.9, 1.2
-COMBO_TIME_FACTOR = 0.85  # Multiplier applied to the total time for a pose combo.
-HOLD_TIME = 0.30  # Seconds a pose must be held to count.
-FAST_HOLD_TIME = 0.22
-OPPOSITE_CHANCE = 0.4  # Chance to reverse a command after the first two commands.
-
-# Pose thresholds are measured relative to the calibrated neutral position.
-YAW_THRESH = 0.6  # Yaw change as a fraction of the tracker's full-turn scale.
-TILT_THRESH = 14.0  # Minimum head tilt in degrees.
-
-READY_SECONDS = 1.0
-FLASH_SECONDS = 0.35
-# Each pose maps to its label, avatar yaw from -1 to 1 and avatar roll in degrees.
-POSES = {
-    "left": ("TURN LEFT", -1.0, 0.0),
-    "right": ("TURN RIGHT", 1.0, 0.0),
-    "tilt_left": ("TILT LEFT", 0.0, -28.0),
-    "tilt_right": ("TILT RIGHT", 0.0, 28.0),
-}
-OPPOSITE = {"left": "right", "right": "left", "tilt_left": "tilt_right", "tilt_right": "tilt_left"}
-FLASH_WORDS = ("NICE!", "YES!", "GOOD!", "BOOM!", "SMOOTH!")
-
-# Challenge setting name, display label and description.
-CHALLENGES = (
-    ("fast", "Fast", "Shorter time for every command"),
-    ("opposite", "Opposite", "Red commands: do the OPPOSITE pose"),
-    ("combo", "Combo", "Two poses in a row, in order"),
-)
-
-BG = (18, 18, 34)
-TARGET_COLOR = (245, 205, 110)
-OPPOSITE_COLOR = (250, 120, 120)
-DONE_COLOR = (110, 210, 130)
-YOU_COLOR = (125, 195, 255)
-DARK = (25, 25, 35)
-
-
-def classify(yaw_off: float, roll_off: float) -> str | None:
-    """Turn offsets from neutral into a pose id (or None when roughly neutral)."""
-    yn, rn = abs(yaw_off) / YAW_THRESH, abs(roll_off) / TILT_THRESH
-    if max(yn, rn) < 1.0:
-        return None
-    if yn >= rn:
-        return "right" if yaw_off > 0 else "left"
-    return "tilt_right" if roll_off > 0 else "tilt_left"
-
-
-class simonsays(FaceMinigame):
-    """Copy the pose on the left with your head before the time bar empties."""
-
-    title = "Simon Says"
-=======
 SPEECH = {
     "left": ("Quick update from my side...", "Can everyone see my screen?",
              "I'll circle back on that.", "One tiny blocker..."),
@@ -94,6 +39,8 @@ SPEECH = {
               "Could we take this offline?", "You're still on mute."),
 }
 NAMES = {"left": "MAYA", "forward": "PRESENTER", "right": "JAMIE"}
+
+
 def classify_direction(yaw_off: float) -> str:
     if yaw_off <= -SIDE_THRESHOLD:
         return "left"
@@ -104,7 +51,6 @@ def classify_direction(yaw_off: float) -> str:
 
 class simonsays(FaceMinigame):
     title = "Who's Talking?"
->>>>>>> e5a16ac (Meeting game v1)
     after_calibration = "ready"
 
     def __init__(self, screen: pygame.Surface, tracker: FaceTracker | None = None, *,
@@ -115,10 +61,6 @@ class simonsays(FaceMinigame):
         self.combo = combo
         self.start()
 
-<<<<<<< HEAD
-    # Actions shown on the game intro screen.
-=======
->>>>>>> e5a16ac (Meeting game v1)
     @property
     def actions(self) -> tuple[Action, Action]:
         return (
@@ -130,20 +72,7 @@ class simonsays(FaceMinigame):
         super().start()
         self.done = 0
         self.ready_t = 0.0
-<<<<<<< HEAD
-
-        self.current: str | None = None  # Pose currently detected for the player.
-        self.you_yaw = self.you_roll = 0.0  # Target yaw and roll for the player's avatar.
-        self.vis_yaw = self.vis_roll = 0.0  # Smoothed yaw and roll used to draw the avatar.
-
-        self.flash_t = 0.0
-        self.flash_word = FLASH_WORDS[0]
-        self.last_required: str | None = None
-        self.cmd: dict = {"required": ["left"], "shown": ["left"], "opposite": False}
-        self.idx = 0
-=======
         self.turn_left = TURN_SECONDS
->>>>>>> e5a16ac (Meeting game v1)
         self.hold = 0.0
         self.current = "forward"
         self.speaker = "forward"
@@ -154,48 +83,15 @@ class simonsays(FaceMinigame):
         self.feedback_t = 0.0
         self._new_speaker(first=True)
 
-<<<<<<< HEAD
-    # Choose poses and timing for each command.
-    def _pose_pool(self) -> tuple[str, ...]:
-        if self.tracker.available and not self.tracker.has_roll:
-            return ("left", "right")  # This tracker cannot detect head tilt.
-        return tuple(POSES)
-
-    def _new_command(self) -> None:
-        progress = min(1.0, self.done / max(1, TARGET_COMMANDS - 1))
-        t0, t1 = (FAST_TIME_START, FAST_TIME_END) if self.fast else (TIME_START, TIME_END)
-        base = t0 + (t1 - t0) * progress
-
-        count = 2 if self.combo and self.done >= 1 else 1
-        pool = self._pose_pool()
-        required: list[str] = []
-        prev = self.last_required
-        for _ in range(count):
-            # Avoid asking for the pose the player most recently held.
-            pick = random.choice([p for p in pool if p != prev])
-            required.append(pick)
-            prev = pick
-
-        opposite = self.opposite and self.done >= 2 and random.random() < OPPOSITE_CHANCE
-        shown = [OPPOSITE[p] for p in required] if opposite else list(required)
-
-        self.cmd = {"required": required, "shown": shown, "opposite": opposite}
-        self.idx = 0
-=======
     def _new_speaker(self, first: bool = False) -> None:
         choices = [d for d in ("left", "forward", "right") if d != self.previous_speaker]
         self.speaker = "forward" if first else random.choice(choices)
         self.previous_speaker = self.speaker
         self.line = random.choice(SPEECH[self.speaker])
         self.turn_left = TURN_SECONDS * (0.82 if self.fast else 1.0) + (1.0 if first else 0.0)
->>>>>>> e5a16ac (Meeting game v1)
         self.hold = 0.0
         self.talking_t = 0.0
 
-<<<<<<< HEAD
-    # Update pose detection, command timing and progress.
-=======
->>>>>>> e5a16ac (Meeting game v1)
     def update(self, dt: float) -> None:
         if self.finished:
             return
@@ -221,11 +117,7 @@ class simonsays(FaceMinigame):
         if self.current == self.speaker:
             self.hold += dt
         else:
-<<<<<<< HEAD
-            self.hold = max(0.0, self.hold - 3.0 * dt)  # Reduce the timer gradually to tolerate brief detection gaps.
-=======
             self.hold = max(0.0, self.hold - dt * 2.5)
->>>>>>> e5a16ac (Meeting game v1)
 
         if self.hold >= HOLD_SECONDS and self.talking_t >= SPEAK_SECONDS:
             self.done += 1
@@ -242,14 +134,6 @@ class simonsays(FaceMinigame):
             self.feedback = "WRONG PERSON."
             self.finish(False)
 
-<<<<<<< HEAD
-    # Draw the player, target poses and progress.
-    def _draw_face(self, screen: pygame.Surface, cx: int, cy: int, r: int,
-                   yaw: float, roll: float, color: tuple[int, int, int]) -> None:
-        """Cartoon head. yaw -1..1 shifts the features, roll tilts the whole head."""
-        a = math.radians(roll)
-        ca, sa = math.cos(a), math.sin(a)
-=======
     def _draw_room(self, screen: pygame.Surface, w: int, h: int) -> None:
         screen.fill(WALL)
         pygame.draw.rect(screen, NAVY, (0, 0, w, 72))
@@ -265,7 +149,6 @@ class simonsays(FaceMinigame):
         pygame.draw.rect(screen, (235, 237, 232), (325, 435, 150, 76), border_radius=5)
         for y in range(449, 499, 12):
             pygame.draw.line(screen, (174, 179, 181), (340, y), (460, y), 2)
->>>>>>> e5a16ac (Meeting game v1)
 
     def _draw_person(self, screen: pygame.Surface, x: int, base_y: int, active: bool,
                      phase: float, jacket: tuple[int, int, int], name: str) -> None:
@@ -318,69 +201,6 @@ class simonsays(FaceMinigame):
             draw_camera_preview(screen, self.tracker)
             return
 
-<<<<<<< HEAD
-        lx, rx, cy = int(w * 0.29), int(w * 0.72), 270
-
-        # Draw the player's avatar.
-        required = self.cmd["required"][min(self.idx, len(self.cmd["required"]) - 1)]
-        matching = self.mode == "play" and self.current == required
-        self._draw_face(screen, rx, cy, 100, self.vis_yaw, self.vis_roll, YOU_COLOR)
-        if matching:
-            pygame.draw.circle(screen, DONE_COLOR, (rx, cy), 112, 6)
-        draw_text_centered(screen, self.font, "YOU", (200, 200, 210), (rx, cy + 135))
-
-        if self.mode == "ready":
-            draw_text_centered(screen, self.big_font, "GET READY!", (240, 240, 240), (lx + 40, cy))
-            return
-
-        # Draw the requested pose or pose sequence.
-        shown, count = self.cmd["shown"], len(self.cmd["shown"])
-        opposite = self.cmd["opposite"]
-        radius = 100 if count == 1 else 72
-        for i, pose in enumerate(shown):
-            x = lx if count == 1 else lx - 85 + i * 170
-            _, yaw, roll = POSES[pose]
-            if i < self.idx:
-                color = DONE_COLOR
-            else:
-                color = OPPOSITE_COLOR if opposite else TARGET_COLOR
-            self._draw_face(screen, x, cy, radius, yaw, roll, color)
-            if i == self.idx:
-                pygame.draw.circle(screen, (255, 255, 255), (x, cy), radius + 12, 4)
-        labels = "  >  ".join(POSES[p][0] for p in shown)
-        draw_text_centered(screen, self.font, labels, OPPOSITE_COLOR if opposite else (240, 240, 240),
-                   (lx, cy + 135))
-
-        if opposite and int(self.elapsed * 6) % 2 == 0:
-            draw_text_centered(screen, self.big_font, "DO THE OPPOSITE!", (255, 90, 90), (w // 2, 85))
-
-        # Show whether the displayed pose matches or opposes the requested pose.
-        mx = (lx + rx) // 2
-        pygame.draw.line(screen, (230, 230, 230), (mx - 25, cy - 10), (mx + 25, cy - 10), 5)
-        pygame.draw.line(screen, (230, 230, 230), (mx - 25, cy + 10), (mx + 25, cy + 10), 5)
-        if opposite:
-            pygame.draw.line(screen, (255, 90, 90), (mx - 30, cy + 32), (mx + 30, cy - 32), 6)
-
-        # Show the hold meter under the player and the timer along the bottom.
-        need = FAST_HOLD_TIME if self.fast else HOLD_TIME
-        draw_bar(screen, (rx - 80, cy + 160, 160, 10), self.hold / need, DONE_COLOR)
-
-        frac = max(0.0, self.time_left / self.time_limit)
-        bar_color = DONE_COLOR if frac > 0.5 else (240, 180, 60) if frac > 0.25 else (235, 70, 70)
-        bx, by, bw, bh = 120, h - 62, w - 240, 26
-        draw_bar(screen, (bx, by, bw, bh), frac, bar_color, radius=8)
-
-        if self.flash_t > 0:
-            draw_text_centered(screen, self.big_font, self.flash_word, DONE_COLOR, (rx, cy - 140))
-
-    def _draw_hud(self, screen: pygame.Surface, w: int, h: int) -> None:
-        screen.blit(self.font.render(f"{self.done} / {TARGET_COMMANDS}", True, (240, 240, 240)), (10, 10))
-
-        draw_camera_preview(screen, self.tracker)
-
-        if self.tracker.available:
-            info = f"Pose tracking: {self.tracker.backend}"
-=======
         for direction, jacket in (("left", (92, 64, 48)), ("forward", CHASE_BLUE),
                                   ("right", (62, 94, 112))):
             self._draw_person(screen, positions[direction], 300, direction == self.speaker,
@@ -392,7 +212,6 @@ class simonsays(FaceMinigame):
             draw_text_centered(screen, self.font, "WATCH WHO'S SPEAKING", WHITE, (w // 2, 260))
             draw_text_centered(screen, self.small_font, "Turn left, right, or face forward", CHASE_LIGHT,
                                (w // 2, 294))
->>>>>>> e5a16ac (Meeting game v1)
         else:
             total = TURN_SECONDS * (0.82 if self.fast else 1.0) + (1.0 if self.done == 0 else 0.0)
             frac = max(0.0, self.turn_left / total)
