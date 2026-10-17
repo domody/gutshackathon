@@ -1,24 +1,10 @@
-"""Coffee Run. Difficulty settings (constants below):
-
-    Main dials
-      HEAD_GAIN      cup degrees per head degree   lower = harder
-      SAFE_ROLL      lean allowed before spilling  lower = harder
-
-    Other knobs
-      WOBBLE_ROLL    how hard the hand swings      higher = harder
-      SPILL_RATE     coffee lost just past ring    higher = harder
-      SPILL_SPEED_UP extra loss the further past   higher = harder
-      JOLT_EVERY     seconds between jolts         lower = harder
-      JOLT_SIZE      size of each jolt (degrees)   higher = harder
-      DURATION       seconds to survive            higher = harder
-
-    Harder example: HEAD_GAIN = 1.2, SAFE_ROLL = 16
-"""
 from __future__ import annotations
 
 import math
+import os
 import random
 
+import numpy as np
 import pygame
 
 from game.face_minigame import FaceMinigame
@@ -26,57 +12,73 @@ from game.minigame import Action
 from game.tracking import FaceTracker
 from game.ui import draw_bar, draw_camera_preview, draw_status_line, draw_text_centered
 
-
-DURATION = 16.0  # Seconds the player must carry the coffee.
+DURATION = 16.0
 READY_SECONDS = 1.5
+CONTROL_ACCELERATION = 4.8
+OUTWARD_GRAVITY = 1.35
+DRAG = 0.72
+MAX_SPEED = 2.1
+SAFE_POSITION = 0.58
+SPILL_RATE = 0.13
+SPILL_SPEED_UP = 0.34
+JOLT_EVERY = (2.7, 4.2)
+JOLT_SIZE = (0.18, 0.32)
 
-# Cup motion combines automatic wobble with head tilt to balance the coffee.
-HEAD_GAIN = 1.6  # Cup tilt degrees added per degree of head tilt.
-SAFE_ROLL = 21.0  # Maximum cup tilt before coffee spills.
-SAFE_YAW = 0.5  # Fixed perspective offset used when drawing the cup rim.
-WOBBLE_ROLL = 36.0
-JOLT_EVERY = (2.5, 4.0)
-JOLT_SIZE = (6.0, 10.0)
-SPILL_RATE = 0.18  # Coffee lost per second just beyond the safe tilt.
-SPILL_SPEED_UP = 0.5  # Additional spill rate per unit beyond the safe tilt.
-
-BG = (28, 22, 30)
-FLOOR = (44, 34, 40)
-SKIN = (238, 192, 150)
-SKIN_SHADE = (205, 156, 118)
-SLEEVE = (70, 90, 150)
-CUP = (245, 245, 250)
-CUP_SHADE = (215, 215, 225)
-SLEEVE_BAND = (200, 90, 80)
-COFFEE = (110, 66, 38)
-COFFEE_TOP = (140, 88, 52)
-GOOD = (110, 210, 130)
-WARN = (240, 180, 60)
-BAD = (235, 70, 70)
-DARK = (25, 25, 35)
+NAVY = (8, 35, 64)
+WHITE = (248, 248, 243)
+PALE = (196, 220, 234)
+COFFEE = (105, 57, 30)
+COFFEE_TOP = (130, 75, 39)
+GOOD = (62, 175, 108)
+WARN = (240, 173, 50)
+BAD = (214, 65, 62)
+ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 
-def lerp_color(a: tuple[int, int, int], b: tuple[int, int, int], t: float) -> tuple[int, int, int]:
-    t = max(0.0, min(1.0, t))
-    return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
+def _load_chroma(filename: str, remove_coffee: bool = False) -> tuple[pygame.Surface, pygame.Rect]:
+    image = pygame.image.load(os.path.join(ASSET_DIR, filename)).convert_alpha()
+    rgb = pygame.surfarray.array3d(image)
+    alpha = pygame.surfarray.pixels_alpha(image)
+    red = rgb[:, :, 0].astype(np.int16)
+    green = rgb[:, :, 1].astype(np.int16)
+    blue = rgb[:, :, 2].astype(np.int16)
+    pink = ((red > 80) & (blue > 80) & (green < np.minimum(red, blue) * 0.70)
+            & (np.abs(red - blue) < 100))
+    alpha[pink] = 0
+    if remove_coffee:
+        xs = np.arange(image.get_width())[:, None]
+        ys = np.arange(image.get_height())[None, :]
+        coffee_area = (xs > 385) & (xs < 575) & (ys > 150) & (ys < 225)
+        brown = ((rgb[:, :, 0] > 30) & (rgb[:, :, 0] < 170)
+                 & (rgb[:, :, 1] > 14) & (rgb[:, :, 1] < 125)
+                 & (rgb[:, :, 2] < 100))
+        alpha[coffee_area & brown] = 0
+    del alpha
+    bounds = image.get_bounding_rect(min_alpha=8)
+    return image.subsurface(bounds).copy(), bounds
 
 
 class CoffeeRun(FaceMinigame):
-    """Tilt your head to keep the wobbling cup level. Don't spill the coffee."""
-
     title = "Coffee Run"
     after_calibration = "ready"
 
     def __init__(self, screen: pygame.Surface, tracker: FaceTracker | None = None) -> None:
         super().__init__(screen, tracker)
+        self.hallway_source = pygame.image.load(os.path.join(ASSET_DIR, "coffee_hallway.png")).convert()
+        self.hand_source, self.hand_bounds = _load_chroma("coffee_hand.png", True)
+        self.bar_source, _ = _load_chroma("coffee_balance_bar.png")
+        self.marker_source, _ = _load_chroma("coffee_balance_marker.png")
+        self._art_size: tuple[int, int] | None = None
+        self.hand_art: pygame.Surface | None = None
+        self.bar_art: pygame.Surface | None = None
+        self.marker_art: pygame.Surface | None = None
         self.start()
 
-    # Actions shown on the game intro screen.
     @property
     def actions(self) -> tuple[Action, Action]:
         return (
-            Action("Tilt Left", "Tilt your head left to correct the cup"),
-            Action("Tilt Right", "Tilt your head right to correct the cup"),
+            Action("Tilt Left", "Tilt your head left to push the marker left"),
+            Action("Tilt Right", "Tilt your head right to push the marker right"),
         )
 
     @property
@@ -89,41 +91,46 @@ class CoffeeRun(FaceMinigame):
         self.ready_t = 0.0
         self.coffee = 1.0
         self.spilled = 0.0
-
-        self.you_roll = 0.0  # Current head-tilt target.
-        self.vis_roll = 0.0  # Smoothed head tilt used to draw the player.
-
-        self.lean_roll = 0.0  # Combined cup lean from wobble, jolts and head movement.
-        self.lean_yaw = 0.0
-        self.phases = [random.uniform(0, math.tau) for _ in range(2)]
-        self.freqs = [random.uniform(0.45, 0.7), random.uniform(0.9, 1.3)]
-        self.jolt_roll = 0.0
+        self.head_roll = 0.0
+        self.balance = 0.0
+        self.velocity = 0.0
         self.jolt_t = random.uniform(*JOLT_EVERY)
-        self.drops: list[list[float]] = []  # Spill particles as x, y, horizontal speed, vertical speed and lifetime.
+        self.drops: list[list[float]] = []
         self.drop_acc = 0.0
 
-    # Update the cup, spill and round state.
     def update(self, dt: float) -> None:
         if self.finished:
             return
         dt = min(dt, 0.1)
-        self.vis_roll += (self.you_roll - self.vis_roll) * min(1.0, 14.0 * dt)
         self._update_drops(dt)
-
         if self.mode == "calibrate":
             self.update_calibration(dt)
             return
 
         self._read_pose()
         if self.mode == "ready":
-            self.lean_roll = self.vis_roll * HEAD_GAIN
             self.ready_t += dt
             if self.ready_t >= READY_SECONDS:
                 self.mode = "play"
             return
 
         self.elapsed += dt
-        self._update_lean(dt)
+        control = max(-1.0, min(1.0, self.head_roll / 22.0))
+        acceleration = control * CONTROL_ACCELERATION + self.balance * OUTWARD_GRAVITY
+        self.velocity += acceleration * dt
+        self.velocity *= math.exp(-DRAG * dt)
+
+        self.jolt_t -= dt
+        if self.jolt_t <= 0.0:
+            self.jolt_t = random.uniform(*JOLT_EVERY)
+            self.velocity += random.choice((-1, 1)) * random.uniform(*JOLT_SIZE)
+
+        self.velocity = max(-MAX_SPEED, min(MAX_SPEED, self.velocity))
+        self.balance += self.velocity * dt
+        if abs(self.balance) > 1.0:
+            self.balance = math.copysign(1.0, self.balance)
+            self.velocity *= -0.18
+
         self._update_spill(dt)
         if self.coffee <= 0.0:
             self.coffee = 0.0
@@ -134,214 +141,150 @@ class CoffeeRun(FaceMinigame):
     def _read_pose(self) -> None:
         offsets = self.read_offsets()
         if offsets is None:
-            self.you_roll *= 0.9
+            self.head_roll *= 0.88
             return
-
-        yaw_off, roll_off = offsets
-        if not (not self.tracker.available or self.tracker.has_roll):
-            roll_off = yaw_off * 30.0  # Approximate tilt from head turn when the tracker cannot detect roll.
-        self.you_roll = max(-30.0, min(30.0, roll_off))
-
-    def _update_lean(self, dt: float) -> None:
-        ramp = 0.65 + 0.35 * min(1.0, self.elapsed / DURATION)
-        t = self.elapsed
-        p, f = self.phases, self.freqs
-
-        self.jolt_t -= dt
-        if self.jolt_t <= 0:
-            self.jolt_t = random.uniform(*JOLT_EVERY)
-            self.jolt_roll += random.choice((-1, 1)) * random.uniform(*JOLT_SIZE) * ramp
-        self.jolt_roll *= math.exp(-1.6 * dt)
-
-        wobble = (0.65 * math.sin(f[0] * t + p[0]) + 0.35 * math.sin(f[1] * t + p[1])) * WOBBLE_ROLL * ramp
-        self.lean_roll = wobble + self.jolt_roll + self.vis_roll * HEAD_GAIN
+        yaw, roll = offsets
+        if self.tracker.available and not self.tracker.has_roll:
+            roll = yaw * 30.0
+        self.head_roll = max(-30.0, min(30.0, roll))
 
     def danger(self) -> float:
-        """Lean as a fraction of the safe zone (1.0 = about to spill)."""
-        return abs(self.lean_roll) / SAFE_ROLL
+        return abs(self.balance) / SAFE_POSITION
 
     def _update_spill(self, dt: float) -> None:
         over = self.danger() - 1.0
-        if over <= 0 or self.coffee <= 0:
+        if over <= 0.0 or self.coffee <= 0.0:
             return
         loss = (SPILL_RATE + SPILL_SPEED_UP * min(over, 1.0)) * dt
-        self.coffee -= loss
-        self.spilled += loss
-        self.drop_acc += (25 + 50 * min(over, 1.0)) * dt
+        self.coffee = max(0.0, self.coffee - loss)
+        self.spilled = min(1.0, self.spilled + loss)
+        self.drop_acc += (18 + 42 * min(over, 1.0)) * dt
         while self.drop_acc >= 1.0:
             self.drop_acc -= 1.0
             self._emit_drop()
 
     def _emit_drop(self) -> None:
-        w, h = self.screen.get_size()
-        s = h / 720
-        px, py = self._pivot(w, h)
-        side = 1.0 if self.lean_roll >= 0 else -1.0
-        vx = side * random.uniform(60, 160) * s
-        vy = random.uniform(-120, -20) * s
-        a = math.radians(self.lean_roll)
-        x, y = side * 65 * s, -250 * s
-        wx = px + x * math.cos(a) - y * math.sin(a)
-        wy = py + x * math.sin(a) + y * math.cos(a)
-        self.drops.append([wx, wy, vx, vy, random.uniform(0.8, 1.4)])
+        width, height = self.screen.get_size()
+        side = 1 if self.balance > 0 else -1
+        x = width * 0.50 + side * width * 0.08
+        y = height * 0.49
+        self.drops.append([x, y, side * random.uniform(50, 130), random.uniform(-80, -15), 1.2])
 
     def _update_drops(self, dt: float) -> None:
-        g = 900 * self.screen.get_height() / 720
-        for d in self.drops:
-            d[3] += g * dt
-            d[0] += d[2] * dt
-            d[1] += d[3] * dt
-            d[4] -= dt
-        self.drops = [d for d in self.drops if d[4] > 0 and d[1] < self.screen.get_height()]
+        gravity = self.screen.get_height() * 1.35
+        for drop in self.drops:
+            drop[3] += gravity * dt
+            drop[0] += drop[2] * dt
+            drop[1] += drop[3] * dt
+            drop[4] -= dt
+        self.drops = [drop for drop in self.drops if drop[4] > 0.0]
 
-    # Draw the cup, player and interface.
-    def _pivot(self, w: int, h: int) -> tuple[int, int]:
-        return int(w * 0.42), int(h * 0.70)
+    def _prepare_art(self, width: int, height: int) -> None:
+        if self._art_size == (width, height):
+            return
+        self._art_size = (width, height)
+        hand_width = min(int(width * 0.66), int(height * 1.03))
+        hand_height = round(self.hand_source.get_height() * hand_width / self.hand_source.get_width())
+        self.hand_art = pygame.transform.smoothscale(self.hand_source, (hand_width, hand_height))
+        bar_width = min(int(width * 0.69), 690)
+        bar_height = round(self.bar_source.get_height() * bar_width / self.bar_source.get_width())
+        self.bar_art = pygame.transform.smoothscale(self.bar_source, (bar_width, bar_height))
+        marker_size = max(54, int(height * 0.105))
+        self.marker_art = pygame.transform.smoothscale(self.marker_source, (marker_size, marker_size))
 
-    def _draw_arm(self, screen: pygame.Surface, px: int, py: int, s: float) -> None:
-        h = screen.get_height()
-        sleeve = pygame.Rect(0, 0, int(96 * s), h - py + 20)
-        sleeve.midtop = (px, py + int(34 * s))
-        pygame.draw.rect(screen, SLEEVE, sleeve, border_radius=int(10 * s))
-        band = pygame.Rect(sleeve.x, sleeve.y, sleeve.w, int(14 * s))
-        pygame.draw.rect(screen, SLEEVE_BAND, band)
-        wrist = pygame.Rect(0, 0, int(74 * s), int(48 * s))
-        wrist.midtop = (px, py - int(8 * s))
-        pygame.draw.rect(screen, SKIN, wrist, border_radius=int(12 * s))
+    def _draw_hallway(self, screen: pygame.Surface, progress: float) -> None:
+        width, height = screen.get_size()
+        source_w, source_h = self.hallway_source.get_size()
+        eased = progress * progress * (3.0 - 2.0 * progress)
+        zoom = 1.0 + 1.45 * eased
+        crop_w = source_w / zoom
+        crop_h = source_h / zoom
+        center_x = source_w * 0.5
+        center_y = source_h * (0.50 - 0.055 * eased)
+        crop = pygame.Rect(0, 0, round(crop_w), round(crop_h))
+        crop.center = (round(center_x), round(center_y))
+        crop.clamp_ip(self.hallway_source.get_rect())
+        view = self.hallway_source.subsurface(crop)
+        screen.blit(pygame.transform.smoothscale(view, (width, height)), (0, 0))
+        tint = pygame.Surface((width, height), pygame.SRCALPHA)
+        tint.fill((5, 27, 50, 34))
+        screen.blit(tint, (0, 0))
 
-    def _hand_surface(self, s: float, yaw: float) -> pygame.Surface:
-        """Hand + cup, pivot at the centre of the surface, unrotated."""
-        r = int(330 * s)
-        surf = pygame.Surface((2 * r, 2 * r), pygame.SRCALPHA)
+    def _draw_hand(self, screen: pygame.Surface) -> None:
+        width, height = screen.get_size()
+        art = self.hand_art
+        layer = pygame.Surface(art.get_size(), pygame.SRCALPHA)
+        scale_x = art.get_width() / self.hand_bounds.width
+        scale_y = art.get_height() / self.hand_bounds.height
+        coffee_x = (480 - self.hand_bounds.x) * scale_x
+        coffee_y = (187 - self.hand_bounds.y) * scale_y
+        base_w = 176 * scale_x
+        base_h = 52 * scale_y
+        level = max(0.0, min(1.0, self.coffee))
+        cavity = pygame.Rect(0, 0, round(base_w), max(5, round(base_h)))
+        cavity.center = (round(coffee_x), round(coffee_y))
+        pygame.draw.ellipse(layer, (45, 27, 21), cavity)
+        if level > 0.0:
+            coffee_rect = pygame.Rect(0, 0, round(base_w * (0.38 + 0.62 * level)),
+                                      max(3, round(base_h * (0.20 + 0.80 * level))))
+            coffee_rect.center = (round(coffee_x), round(coffee_y + (1.0 - level) * base_h * 0.23))
+            pygame.draw.ellipse(layer, COFFEE_TOP, coffee_rect)
+        layer.blit(art, (0, 0))
+        angle = -self.balance * 12.0
+        rotated = pygame.transform.rotate(layer, angle)
+        center = (int(width * 0.57), int(height * 0.69))
+        screen.blit(rotated, rotated.get_rect(center=center))
 
-        def P(x: float, y: float) -> tuple[int, int]:
-            return int(r + x * s), int(r + y * s)
-
-        # Draw the cup and coffee level, compressing the rim ellipse with forward or backward lean.
-        top_y, bot_y = -250, -90
-        top_w, bot_w = 66, 48
-        openness = max(0.12, min(0.9, 0.45 + 0.42 * yaw / SAFE_YAW * 0.6))
-        rim_h = 2 * top_w * openness
-
-        body = [P(-top_w, top_y), P(top_w, top_y), P(bot_w, bot_y), P(-bot_w, bot_y)]
-        pygame.draw.polygon(surf, CUP, body)
-        pygame.draw.polygon(surf, CUP_SHADE, [P(top_w * 0.45, top_y), P(top_w, top_y),
-                                              P(bot_w, bot_y), P(bot_w * 0.45, bot_y)])
-
-        # Keep the coffee level relative to the screen so it shifts inside the tilted cup.
-        level = max(0.0, self.coffee)
-        cof_y = bot_y + (top_y - bot_y) * (0.15 + 0.78 * level)
-        frac = (cof_y - bot_y) / (top_y - bot_y)
-        cof_w = bot_w + (top_w - bot_w) * frac
-        slosh = max(-1.0, min(1.0, -self.lean_roll / SAFE_ROLL)) * 10
-        surf_h = max(4, int(2 * cof_w * openness * 0.8 * s))
-        if level > 0:
-            pygame.draw.polygon(surf, COFFEE, [P(-cof_w, cof_y), P(cof_w, cof_y),
-                                               P(bot_w, bot_y), P(-bot_w, bot_y)])
-            top = pygame.Rect(0, 0, int(2 * cof_w * s), surf_h)
-            top.center = P(slosh, cof_y)
-            pygame.draw.ellipse(surf, COFFEE_TOP, top)
-
-        rim = pygame.Rect(0, 0, int(2 * top_w * s), max(6, int(rim_h * s)))
-        rim.center = P(0, top_y)
-        pygame.draw.ellipse(surf, DARK, rim, max(3, int(5 * s)))
-
-        # Draw the hand under the cup, with the thumb at the side and fingers across the front.
-        palm = pygame.Rect(0, 0, int(130 * s), int(100 * s))
-        palm.center = P(0, -50)
-        pygame.draw.ellipse(surf, SKIN, palm)
-        thumb = pygame.Rect(0, 0, int(26 * s), int(80 * s))
-        thumb.center = P(-bot_w - 8, -135)
-        pygame.draw.rect(surf, SKIN_SHADE, thumb, border_radius=int(13 * s))
-        for i in range(4):
-            fx = -36 + i * 24
-            finger = pygame.Rect(0, 0, int(21 * s), int(70 * s))
-            finger.center = P(fx + 8, -112)
-            pygame.draw.rect(surf, SKIN, finger, border_radius=int(10 * s))
-            pygame.draw.rect(surf, SKIN_SHADE, finger, 2, border_radius=int(10 * s))
-        return surf
+    def _draw_balance(self, screen: pygame.Surface) -> None:
+        width, height = screen.get_size()
+        bar = self.bar_art
+        bar_rect = bar.get_rect(midtop=(width // 2, 82))
+        screen.blit(bar, bar_rect)
+        left = bar_rect.left + int(bar_rect.width * 0.10)
+        right = bar_rect.right - int(bar_rect.width * 0.10)
+        x = int((left + right) / 2 + self.balance * (right - left) / 2)
+        marker = self.marker_art
+        marker_rect = marker.get_rect(center=(x, bar_rect.centery))
+        screen.blit(marker, marker_rect)
+        draw_text_centered(screen, self.small_font, "KEEP THE CUP IN THE CENTRE", WHITE,
+                           (width // 2, bar_rect.bottom + 16))
 
     def draw(self, screen: pygame.Surface) -> None:
-        w, h = screen.get_size()
-        s = h / 720
-        screen.fill(BG)
-        pygame.draw.rect(screen, FLOOR, (0, h - 110, w, 110))
-        self._draw_hud(screen, w, h)
+        width, height = screen.get_size()
+        self._prepare_art(width, height)
+        progress = min(1.0, self.elapsed / DURATION)
+        self._draw_hallway(screen, progress)
+
+        remaining = max(0, math.ceil(DURATION - self.elapsed))
+        timer = self.font.render(f"{remaining}s", True, WHITE)
+        timer_box = timer.get_rect(topleft=(18, 16)).inflate(22, 12)
+        pygame.draw.rect(screen, NAVY, timer_box, border_radius=10)
+        screen.blit(timer, timer.get_rect(center=timer_box.center))
 
         if self.mode == "calibrate":
             self.draw_calibration(screen)
             return
 
-        px, py = self._pivot(w, h)
-        self._draw_arm(screen, px, py, s)
-
-        # Draw the coffee spilled on the floor.
-        if self.spilled > 0:
-            pw = int(min(1.0, self.spilled) * 420 * s)
-            pud = pygame.Rect(0, 0, pw, max(4, pw // 6))
-            pud.center = (px + int(150 * s), h - 100)
-            pygame.draw.ellipse(screen, COFFEE, pud)
-
-        hand = self._hand_surface(s, self.lean_yaw)
-        hand = pygame.transform.rotate(hand, -self.lean_roll)
-        screen.blit(hand, hand.get_rect(center=(px, py)))
-
+        self._draw_balance(screen)
+        self._draw_hand(screen)
         for x, y, _, _, life in self.drops:
-            pygame.draw.circle(screen, COFFEE, (int(x), int(y)), max(2, int((3 + 3 * min(1.0, life)) * s)))
+            pygame.draw.circle(screen, COFFEE, (int(x), int(y)), max(3, int(6 * min(1.0, life))))
+
+        meter_w = min(360, int(width * 0.42))
+        draw_bar(screen, (width // 2 - meter_w // 2, height - 62, meter_w, 18), self.coffee,
+                 GOOD if self.coffee > 0.35 else BAD, back=(48, 59, 67), radius=8)
+        draw_text_centered(screen, self.small_font, f"COFFEE LEFT  {self.coffee * 100:.0f}%", WHITE,
+                           (width // 2, height - 78))
 
         if self.mode == "ready":
-            draw_text_centered(screen, self.big_font, "GET READY!", (240, 240, 240), (w // 2, 85))
-            draw_text_centered(screen, self.font, "Tilt your head to keep the cup level - don't spill!",
-                               (200, 200, 210), (w // 2, 130))
-            return
-
-        self._draw_gauge(screen, int(w * 0.78), int(h * 0.45), int(95 * s))
-
-        # Show remaining coffee at the side and delivery progress along the bottom.
-        cx, cy, cw, ch = int(w * 0.12), int(h * 0.22), 26, int(h * 0.42)
-        draw_text_centered(screen, self.font, "COFFEE", (240, 240, 240), (cx + cw // 2, cy - 22))
-        self._draw_coffee_bar(screen, cx, cy, cw, ch)
-
-        frac = min(1.0, self.elapsed / DURATION)
-        bx, by, bw, bh = 120, h - 62, w - 240, 26
-        draw_bar(screen, (bx, by, bw, bh), frac, GOOD, radius=8)
-        draw_text_centered(screen, self.small_font, "DELIVERING...", (240, 240, 240), (w // 2, by - 12))
-
-    def _draw_coffee_bar(self, screen: pygame.Surface, x: int, y: int, bw: int, bh: int) -> None:
-        pygame.draw.rect(screen, (50, 45, 60), (x, y, bw, bh), border_radius=8)
-        fill = int(bh * max(0.0, min(1.0, self.coffee)))
-        if fill > 0:
-            col = COFFEE_TOP if self.coffee > 0.35 else BAD
-            pygame.draw.rect(screen, col, (x, y + bh - fill, bw, fill), border_radius=8)
-        pygame.draw.rect(screen, (230, 230, 240), (x, y, bw, bh), 2, border_radius=8)
-
-    def _draw_gauge(self, screen: pygame.Surface, cx: int, cy: int, r: int) -> None:
-        """Level gauge: dot leaves the green ring and the coffee spills."""
-        full = r * 1.4  # Outer gauge radius is 1.4 times the safe tilt radius.
-        pygame.draw.circle(screen, (40, 36, 52), (cx, cy), int(full))
-        pygame.draw.circle(screen, GOOD, (cx, cy), r, 3)
-        pygame.draw.line(screen, (80, 76, 96), (cx - int(full), cy), (cx + int(full), cy), 1)
-        pygame.draw.line(screen, (80, 76, 96), (cx, cy - int(full)), (cx, cy + int(full)), 1)
-
-        nx = max(-1.4, min(1.4, self.lean_roll / SAFE_ROLL))
-        d = self.danger()
-        color = lerp_color(GOOD, WARN, (d - 0.5) * 2) if d < 1 else lerp_color(WARN, BAD, (d - 1) * 3)
-        pos = (cx + int(nx * r), cy)
-        pygame.draw.circle(screen, color, pos, 11)
-        pygame.draw.circle(screen, DARK, pos, 11, 2)
-        draw_text_centered(screen, self.small_font, "KEEP IT IN THE RING", (200, 200, 210),
-                           (cx, cy + int(full) + 18))
-
-    def _draw_hud(self, screen: pygame.Surface, w: int, h: int) -> None:
-        left = max(0.0, DURATION - self.elapsed)
-        screen.blit(self.font.render(f"{left:0.0f}s", True, (240, 240, 240)), (10, 10))
+            panel = pygame.Surface((width, height), pygame.SRCALPHA)
+            panel.fill((5, 25, 45, 145))
+            screen.blit(panel, (0, 0))
+            draw_text_centered(screen, self.big_font, "STEADY...", WHITE, (width // 2, height // 2 - 25))
+            draw_text_centered(screen, self.font, "Tilt your head to keep the marker centred", PALE,
+                               (width // 2, height // 2 + 30))
 
         draw_camera_preview(screen, self.tracker)
-
-        if self.tracker.available:
-            info = f"Pose tracking: {self.tracker.backend}"
-        else:
-            info = "Camera tracking unavailable"
-        draw_status_line(screen, self.small_font, info)
-
+        info = f"Face tracking: {self.tracker.backend}" if self.tracker.available else "Camera tracking unavailable"
+        draw_status_line(screen, self.small_font, info, WHITE)
         self.draw_face_lost(screen, 40)
