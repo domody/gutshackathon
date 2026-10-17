@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import random
 from statistics import median
 
 import pygame
@@ -10,284 +11,415 @@ from game.minigame import Action
 from game.tracking import BodyTracker
 from game.ui import draw_bar, draw_camera_preview, draw_status_line, draw_text_centered
 
-GREEN_SECONDS = 2.8
-RED_SECONDS = 2.6
-STOP_GRACE = 0.65
-COURSE_PER_SECOND = 4.5
+MEETING_SECONDS = 45.0
+INTRO_SECONDS = 4.2
+FIRST_CLEAR_SECONDS = 6.5
+CLEAR_MIN = 4.0
+CLEAR_MAX = 6.2
+APPROACH_SECONDS = 1.15
+FIRST_APPROACH_SECONDS = 1.6
+WATCH_MIN = 2.5
+WATCH_MAX = 3.5
+DEPART_SECONDS = 1.15
+STOP_GRACE = 0.95
+SPRINT_SPEED = 4.6
+WALK_SPEED = 0.72
 PUMP_THRESHOLD = 0.9
-DEFAULT_FREEZE_THRESHOLD = 0.38
-CAUGHT_AFTER = 0.18
-KEY_PULSE = 0.2             # keyboard fallback: how long a new arm "runs"
-KEY_MOTION = 0.24           # keyboard fallback: how long a key press counts as movement
+DEFAULT_STILL_THRESHOLD = 0.42
+CAUGHT_AFTER = 0.2
+CHAT_SECONDS = 2.5
+KEY_RUN_SECONDS = 0.24
+KEY_MOVE_SECONDS = 0.28
+RESULT_SECONDS = 2.8
 
-BG = (11, 16, 20)
-GREEN = (91, 210, 102)
-RED = (238, 74, 79)
-WHITE = (242, 242, 235)
-BAR_BACK = (52, 58, 63)
+NAVY = (13, 35, 57)
+BLUE = (40, 123, 181)
+PALE_BLUE = (154, 207, 232)
+CARPET = (54, 65, 75)
+WALL = (221, 218, 207)
+TRIM = (102, 87, 72)
+DOOR = (73, 91, 104)
+WHITE = (247, 247, 242)
+INK = (25, 32, 38)
+AMBER = (245, 178, 55)
+RED = (219, 69, 72)
+GREEN = (72, 177, 113)
+BAR_BACK = (58, 70, 80)
 
 
 class RedLightGreenLight(CalibratedMinigame):
-    """Advance by alternating arms on green and freeze on red."""
-
-    title = "Red Light, Green Light"
+    title = "Act Natural"
     tracker_cls = BodyTracker
     distance_tolerance = 0.38
 
     def __init__(self, screen: pygame.Surface, tracker: BodyTracker | None = None) -> None:
         super().__init__(screen, tracker)
+        self.heading_font = pygame.font.Font(None, 62)
+        self.countdown_font = pygame.font.Font(None, 42)
+        self.cue_font = pygame.font.Font(None, 50)
         self.start()
 
-    # Public API
     @property
     def actions(self) -> tuple[Action, Action]:
         return (
-            Action("Pump Left", "Pump the left arm (A / Left)", self.pump_left),
-            Action("Pump Right", "Pump the right arm (D / Right)", self.pump_right),
+            Action("Run in Place", "Pump your arms to sprint down the clear hallway", self.run_key),
+            Action("Act Natural", "Stand still to walk casually past colleagues", self.natural_key),
         )
 
     def start(self) -> None:
         super().start()
         self.elapsed = 0.0
         self.course = 0.0
-        self.phase = "green"
+        self.phase = "clear"
         self.phase_time = 0.0
+        self.phase_duration = FIRST_CLEAR_SECONDS
+        self.encounter = 0
         self.exposure = 0.0
+        self.caught_this_encounter = False
+        self.chat_timer = 0.0
+        self.intro_timer = INTRO_SECONDS
+        self.result: bool | None = None
+        self.result_timer = 0.0
         self.running_detected = False
         self.body_visible = False
-        self.freeze_threshold = DEFAULT_FREEZE_THRESHOLD
-        self.status = "GREEN - alternate your arms"
-
-        self.last_key_arm = 0
-        self.key_pulse = 0.0
+        self.still_threshold = DEFAULT_STILL_THRESHOLD
+        self.key_run = 0.0
         self.key_motion = 0.0
+        self.animation_time = 0.0
+        self.status = "Hallway clear - run!"
 
-    # Handle input
-    def pump_left(self) -> None:
-        self._pump(-1)
+    def run_key(self) -> None:
+        self.key_run = KEY_RUN_SECONDS
+        self.key_motion = KEY_MOVE_SECONDS
 
-    def pump_right(self) -> None:
-        self._pump(1)
-
-    def _pump(self, arm: int) -> None:
-        self.key_motion = KEY_MOTION
-        if arm != self.last_key_arm:
-            self.key_pulse = KEY_PULSE
-            self.last_key_arm = arm
+    def natural_key(self) -> None:
+        self.key_run = 0.0
+        self.key_motion = 0.0
 
     def handle_event(self, event: pygame.event.Event) -> None:
         super().handle_event(event)
         if event.type != pygame.KEYDOWN:
             return
-        left, right = self.actions
+        run, natural = self.actions
         if event.key in (pygame.K_a, pygame.K_LEFT):
-            left.perform()
+            run.perform()
         elif event.key in (pygame.K_d, pygame.K_RIGHT):
-            right.perform()
+            natural.perform()
 
-    # Calibration
     def read_sample(self) -> tuple[float, float] | None:
-        """(shoulder width, motion) while the player is in view."""
         body = self.tracker.body if self.tracker.available else None
         self.body_visible = body is not None
         return None if body is None else (body[2], body[1])
 
     def on_calibrated(self, samples: list[tuple[float, float]]) -> None:
-        self.neutral = median(s[0] for s in samples)
-        self.freeze_threshold = max(DEFAULT_FREEZE_THRESHOLD, median(s[1] for s in samples) * 3.2)
-        self.phase, self.phase_time = "green", 0.0
-        self.status = "GREEN - alternate your arms"
+        self.neutral = median(sample[0] for sample in samples)
+        baseline = median(sample[1] for sample in samples)
+        self.still_threshold = max(DEFAULT_STILL_THRESHOLD, baseline * 3.5)
+        self.phase = "clear"
+        self.phase_time = 0.0
+        self.phase_duration = FIRST_CLEAR_SECONDS
 
     def calibration_prompt(self) -> str:
         if self.body_visible:
-            return "Hold still - calibrating distance and movement"
+            return "Stand naturally - measuring your normal body sway"
         return "Show your head, shoulders and upper body"
 
-    # Update state
     def update(self, dt: float) -> None:
         if self.finished:
             return
-
-        self.key_pulse = max(0.0, self.key_pulse - dt)
+        dt = min(dt, 0.1)
+        self.animation_time += dt
+        self.key_run = max(0.0, self.key_run - dt)
         self.key_motion = max(0.0, self.key_motion - dt)
 
         if self.mode == "calibrate":
             self.update_calibration(dt)
             return
 
+        if self.result is not None:
+            self.result_timer += dt
+            if self.result_timer >= RESULT_SECONDS:
+                self.finish(self.result)
+            return
+
         camera = self.tracker.available
         body = self.tracker.body if camera else None
         if camera and body is None:
             self.running_detected = False
-            self.status = "Paused - keep head, shoulders and torso visible"
+            self.status = "Paused - step back into view"
             return
-        pump, motion, width, hands_visible = body if camera else (0.0, 0.0, 0.0, False)
 
+        pump, motion, width, hands_visible = body if camera else (0.0, 0.0, 0.0, True)
         if camera and not self.distance_ok(width):
             self.running_detected = False
             self.status = "Paused - return to your calibrated distance"
             return
 
+        if self.intro_timer > 0:
+            self.intro_timer = max(0.0, self.intro_timer - dt)
+            return
+
         self.elapsed += dt
         self.phase_time += dt
+        self.chat_timer = max(0.0, self.chat_timer - dt)
         self._update_phase()
 
         camera_running = hands_visible and pump >= PUMP_THRESHOLD
-        running = self.key_pulse > 0 or camera_running
-        self.running_detected = self.phase == "green" and running
+        running = self.key_run > 0 or camera_running
+        moving = motion > self.still_threshold or self.key_motion > 0
+        can_sprint = self.phase in ("clear", "approaching", "departing")
+        self.running_detected = running and can_sprint and self.chat_timer <= 0
 
-        if self.phase == "green":
+        if self.phase == "clear":
             self.exposure = max(0.0, self.exposure - dt * 3)
             if running:
-                intensity = max(1.0, min(1.75, pump / PUMP_THRESHOLD)) if camera_running else 1.0
-                self.course = min(100.0, self.course + COURSE_PER_SECOND * intensity * dt)
-                self.status = "Running detected - keep alternating"
+                self.status = "Hallway clear - sprint!"
             elif camera and not hands_visible:
-                self.status = "GREEN - bring both hands into view"
+                self.status = "Bring both hands into view to run"
             else:
-                self.status = "GREEN - alternate your arms"
-        else:
-            self.running_detected = False
-            moving = motion > self.freeze_threshold or self.key_motion > 0
-
+                self.status = "Clear, but you're only walking"
+        elif self.phase == "approaching":
+            self.exposure = max(0.0, self.exposure - dt * 3)
+            self.status = "Act natural! Stop moving"
+        elif self.phase == "watching":
             if self.phase_time < STOP_GRACE:
                 self.exposure = max(0.0, self.exposure - dt * 2)
-                self.status = "RED - stop!"
-            elif moving:
+                self.status = "Act natural!"
+            elif moving and not self.caught_this_encounter:
                 self.exposure = min(CAUGHT_AFTER, self.exposure + dt)
-                self.status = "Movement detected..."
+                self.status = "They're noticing..."
+                if self.exposure >= CAUGHT_AFTER:
+                    self._get_caught()
+            elif self.chat_timer > 0:
+                self.status = "Got a quick minute?"
             else:
-                self.exposure = max(0.0, self.exposure - dt * 2)
-                if camera and not hands_visible:
-                    self.status = "Frozen - hands lowered, body still visible"
-                else:
-                    self.status = "Frozen - good"
+                self.exposure = max(0.0, self.exposure - dt * 3)
+                self.status = "Casual. Completely normal."
+        else:
+            self.exposure = max(0.0, self.exposure - dt * 3)
+            self.status = "They're gone - go!"
 
-            if self.exposure >= CAUGHT_AFTER:
-                self.finish(False)
+        if self.chat_timer <= 0:
+            speed = SPRINT_SPEED if self.running_detected else WALK_SPEED
+            self.course = min(100.0, self.course + speed * dt)
 
         if self.course >= 100.0:
-            self.finish(True)
+            self._finish_game(True)
+        elif self.elapsed >= MEETING_SECONDS:
+            self._finish_game(False)
+
+    def _get_caught(self) -> None:
+        self.caught_this_encounter = True
+        self.chat_timer = CHAT_SECONDS
+        self.exposure = 0.0
+        self.running_detected = False
+        self.status = "Got a quick minute?"
+
+    def _finish_game(self, won: bool) -> None:
+        self.result = won
+        self.result_timer = 0.0
+        self.running_detected = False
 
     def _update_phase(self) -> None:
-        duration = GREEN_SECONDS if self.phase == "green" else RED_SECONDS
-        if self.phase_time < duration:
+        if self.phase_time < self.phase_duration:
             return
-        self.phase = "red" if self.phase == "green" else "green"
+        if self.phase == "clear":
+            self.phase = "approaching"
+            self.encounter += 1
+            self.phase_duration = FIRST_APPROACH_SECONDS if self.encounter == 1 else APPROACH_SECONDS
+            self.caught_this_encounter = False
+        elif self.phase == "approaching":
+            self.phase = "watching"
+            self.phase_duration = random.uniform(WATCH_MIN, WATCH_MAX)
+        elif self.phase == "watching":
+            self.phase = "departing"
+            self.phase_duration = DEPART_SECONDS
+        else:
+            self.phase = "clear"
+            self.phase_duration = random.uniform(CLEAR_MIN, CLEAR_MAX)
         self.phase_time = 0.0
         self.exposure = 0.0
 
-    # Draw the scene
     def draw(self, screen: pygame.Surface) -> None:
-        w, h = screen.get_size()
-        color = GREEN if self.phase == "green" else RED
-        screen.fill(BG)
-
-        # Full-screen light cue, readable from several metres away.
-        tint = pygame.Surface((w, h), pygame.SRCALPHA)
-        tint.fill((*color, 52 if self.mode == "play" else 18))
-        screen.blit(tint, (0, 0))
-
-        horizon = int(h * 0.66)
-        pygame.draw.rect(screen, (27, 33, 37), (0, horizon, w, h - horizon))
-        self._draw_course(screen, w, h, horizon)
-        self._draw_doll(screen, w, horizon, color)
-        self._draw_player(screen, w, h, horizon)
-        self._draw_hud(screen, w, h, color)
-
-    def _draw_course(self, screen: pygame.Surface, w: int, h: int, horizon: int) -> None:
-        """Perspective course: the player runs away from us toward the doll."""
-        near_y = h + 25
-        far_y = horizon + 15
-        near_left, near_right = int(w * 0.13), int(w * 0.87)
-        far_left, far_right = int(w * 0.44), int(w * 0.56)
-
-        pygame.draw.polygon(
-            screen, (39, 45, 48),
-            [(near_left, near_y), (near_right, near_y), (far_right, far_y), (far_left, far_y)])
-        pygame.draw.line(screen, (97, 104, 107), (near_left, near_y), (far_left, far_y), 4)
-        pygame.draw.line(screen, (97, 104, 107), (near_right, near_y), (far_right, far_y), 4)
-
-        # Distance markers bunch together toward the horizon.
-        for index in range(1, 9):
-            depth = (index / 9) ** 2
-            y = int(near_y + (far_y - near_y) * depth)
-            left = int(near_left + (far_left - near_left) * depth)
-            right = int(near_right + (far_right - near_right) * depth)
-            pygame.draw.line(screen, (68, 75, 78), (left, y), (right, y), 2)
-
-        # Finish line directly in front of the doll.
-        pygame.draw.line(screen, WHITE, (far_left - 12, far_y + 8), (far_right + 12, far_y + 8), 5)
-
-    def _draw_doll(self, screen: pygame.Surface, w: int, horizon: int, color) -> None:
-        x, y = w // 2, int(horizon * 0.42)
-        facing_player = self.phase == "red" and self.mode == "play"
-        pygame.draw.circle(screen, (230, 188, 148), (x, y), 45)
-        hair = (50, 35, 31)
-        pygame.draw.arc(screen, hair, (x - 48, y - 49, 96, 92), math.pi, math.pi * 2, 13)
-        pygame.draw.rect(screen, (236, 155, 76), (x - 42, y + 38, 84, 92), border_radius=14)
-        if facing_player:
-            pygame.draw.circle(screen, color, (x - 16, y - 2), 6)
-            pygame.draw.circle(screen, color, (x + 16, y - 2), 6)
-        else:
-            pygame.draw.arc(screen, hair, (x - 29, y - 10, 58, 36), 0, math.pi, 8)
-
-    def _draw_player(self, screen: pygame.Surface, w: int, h: int, horizon: int) -> None:
-        progress = max(0.0, min(1.0, self.course / 100))
-        near_y, far_y = h - 68, horizon + 34
-        depth = progress ** 0.72   # eased so early movement is easy to see
-        x = w // 2
-        y = int(near_y + (far_y - near_y) * depth)
-        scale = 1.0 - 0.62 * depth
-        head = max(5, int(13 * scale))
-        torso = max(12, int(35 * scale))
-        limb = max(8, int(27 * scale))
-        width = max(3, int(7 * scale))
-        color = (108, 194, 225)
-
-        swing = 0
-        if self.running_detected:
-            swing = int(math.sin(self.elapsed * 15) * limb * 0.55)
-
-        shoulder_y = y - torso
-        hip_y = y
-        pygame.draw.circle(screen, color, (x, shoulder_y - head - 2), head)
-        pygame.draw.line(screen, color, (x, shoulder_y), (x, hip_y), width)
-        pygame.draw.line(screen, color, (x, shoulder_y + 3), (x - limb // 2, shoulder_y + limb + swing), width)
-        pygame.draw.line(screen, color, (x, shoulder_y + 3), (x + limb // 2, shoulder_y + limb - swing), width)
-        pygame.draw.line(screen, color, (x, hip_y), (x - limb // 3, hip_y + limb - swing // 2), width)
-        pygame.draw.line(screen, color, (x, hip_y), (x + limb // 3, hip_y + limb + swing // 2), width)
-
-    def _draw_hud(self, screen: pygame.Surface, w: int, h: int, color) -> None:
-        if self.mode == "calibrate":
-            heading = "CALIBRATING"
-        elif self.phase == "green":
-            heading = "GREEN LIGHT"
-        elif self.phase_time < STOP_GRACE:
-            heading = "STOP!"
-        else:
-            heading = "RED LIGHT"
-        draw_text_centered(screen, self.big_font, heading, color, (w // 2, 50))
-
-        if self.mode == "calibrate":
-            self.draw_calibration(screen)
-        else:
-            draw_text_centered(screen, self.font, self.status, WHITE, (w // 2, 100))
-
-            bx, by, bw = w // 2 - 180, 135, 360
-            draw_bar(screen, (bx, by, bw, 16), self.course / 100, GREEN, back=BAR_BACK, radius=6)
-            draw_text_centered(screen, self.small_font, f"COURSE  {self.course:.0f}%", WHITE,
-                               (w // 2, by + 32))
-            if self.phase == "red":
-                draw_bar(screen, (bx, by + 58, bw, 10), self.exposure / CAUGHT_AFTER, RED,
-                         back=BAR_BACK, radius=5)
-
+        width, height = screen.get_size()
+        screen.fill(NAVY)
+        horizon = int(height * 0.6)
+        self._draw_hallway(screen, width, height, horizon)
+        self._draw_destination(screen, width, horizon)
+        self._draw_colleague(screen, width, height, horizon)
+        self._draw_player(screen, width, height, horizon)
+        self._draw_hud(screen, width, height)
         draw_camera_preview(screen, self.tracker)
 
         if self.tracker.available:
             body = self.tracker.body
             hands = "visible" if body and body[3] else "lowered/off-screen"
-            info = f"Body tracking: {self.tracker.backend}   hands: {hands}   (C = recalibrate)"
+            info = f"Body tracking: {self.tracker.backend}   hands: {hands}   C: recalibrate"
         else:
-            info = "No camera tracking - keyboard: alternate A/D or arrows"
-        draw_status_line(screen, self.small_font, info)
+            info = "No camera tracking - A: run / D: act natural"
+        draw_status_line(screen, self.small_font, info, WHITE)
+
+        if self.intro_timer > 0 and self.mode == "play":
+            self._draw_intro(screen, width, height)
+        if self.result is not None:
+            self._draw_result(screen, width, height)
+
+    def _draw_hallway(self, screen: pygame.Surface, width: int, height: int, horizon: int) -> None:
+        pygame.draw.rect(screen, WALL, (0, 0, width, horizon))
+        pygame.draw.polygon(screen, CARPET, [(0, height), (width, height), (int(width * 0.62), horizon), (int(width * 0.38), horizon)])
+        pygame.draw.polygon(screen, (201, 198, 188), [(0, 0), (int(width * 0.38), horizon), (0, horizon)])
+        pygame.draw.polygon(screen, (210, 207, 197), [(width, 0), (int(width * 0.62), horizon), (width, horizon)])
+        pygame.draw.line(screen, TRIM, (0, horizon), (width, horizon), 5)
+
+        for index in range(1, 7):
+            depth = index / 7
+            y = int(height + (horizon - height) * depth * depth)
+            left = int((width * 0.38) * depth)
+            right = width - left
+            pygame.draw.line(screen, (78, 89, 97), (left, y), (right, y), 2)
+
+        for side in (-1, 1):
+            for index in range(3):
+                y = int(horizon * (0.3 + index * 0.23))
+                door_w = max(35, int(width * (0.12 - index * 0.018)))
+                door_h = max(70, int(height * (0.29 - index * 0.035)))
+                if side < 0:
+                    x = int(width * (0.03 + index * 0.09))
+                else:
+                    x = width - int(width * (0.03 + index * 0.09)) - door_w
+                pygame.draw.rect(screen, DOOR, (x, y, door_w, door_h), border_radius=3)
+                knob_x = x + door_w - 9 if side < 0 else x + 9
+                pygame.draw.circle(screen, AMBER, (knob_x, y + door_h // 2), 3)
+
+        for x in (int(width * 0.28), int(width * 0.72)):
+            pygame.draw.line(screen, WHITE, (x, 16), (width // 2, horizon - 12), 5)
+
+    def _draw_destination(self, screen: pygame.Surface, width: int, horizon: int) -> None:
+        door = pygame.Rect(width // 2 - 62, horizon - 155, 124, 155)
+        pygame.draw.rect(screen, NAVY, door, border_radius=5)
+        pygame.draw.rect(screen, PALE_BLUE, door.inflate(-12, -12), border_radius=3)
+        pygame.draw.line(screen, NAVY, (door.centerx, door.top + 6), (door.centerx, door.bottom - 6), 4)
+        sign = self.small_font.render("MEETING ROOM", True, WHITE)
+        sign_box = sign.get_rect(center=(door.centerx, door.top - 18)).inflate(18, 8)
+        pygame.draw.rect(screen, NAVY, sign_box, border_radius=5)
+        screen.blit(sign, sign.get_rect(center=sign_box.center))
+
+    def _draw_colleague(self, screen: pygame.Surface, width: int, height: int, horizon: int) -> None:
+        if self.phase == "clear":
+            return
+        progress = min(1.0, self.phase_time / max(self.phase_duration, 0.01))
+        if self.phase == "approaching":
+            x = int(width * (0.88 - progress * 0.22))
+        elif self.phase == "watching":
+            x = int(width * (0.66 - progress * 0.25))
+        else:
+            x = int(width * (0.41 - progress * 0.34))
+        y = horizon + int(height * 0.08)
+        scale = max(0.75, height / 720)
+        head = int(19 * scale)
+        body_h = int(76 * scale)
+        pygame.draw.ellipse(screen, (35, 42, 47), (x - 35, y + body_h + 14, 70, 16))
+        pygame.draw.rect(screen, (116, 79, 126), (x - 25, y, 50, body_h), border_radius=14)
+        pygame.draw.circle(screen, (196, 148, 113), (x, y - head + 2), head)
+        pygame.draw.arc(screen, (52, 37, 32), (x - head, y - head * 2, head * 2, head * 2), math.pi, math.pi * 2, 7)
+        look = -5 if self.phase == "watching" else 3
+        pygame.draw.circle(screen, INK, (x - 6 + look, y - head), 2)
+        pygame.draw.circle(screen, INK, (x + 6 + look, y - head), 2)
+        pygame.draw.line(screen, (196, 148, 113), (x - 20, y + 18), (x - 35, y + 58), 8)
+        pygame.draw.line(screen, (196, 148, 113), (x + 20, y + 18), (x + 35, y + 58), 8)
+
+    def _draw_player(self, screen: pygame.Surface, width: int, height: int, horizon: int) -> None:
+        progress = max(0.0, min(1.0, self.course / 100))
+        depth = progress ** 0.72
+        x = width // 2
+        y = int(height - 74 + (horizon + 30 - (height - 74)) * depth)
+        scale = 1.0 - 0.6 * depth
+        head = max(6, int(14 * scale))
+        torso = max(13, int(38 * scale))
+        limb = max(9, int(29 * scale))
+        stroke = max(3, int(7 * scale))
+        sprinting = self.running_detected
+        frequency = 15 if sprinting else 5
+        amount = 0.62 if sprinting else 0.2
+        swing = int(math.sin(self.animation_time * frequency) * limb * amount)
+        lean = int(8 * scale) if sprinting else 0
+        shoulder_y = y - torso
+        color = BLUE if sprinting else NAVY
+
+        pygame.draw.circle(screen, (188, 135, 98), (x + lean, shoulder_y - head - 2), head)
+        pygame.draw.line(screen, color, (x + lean, shoulder_y), (x, y), stroke)
+        pygame.draw.line(screen, color, (x + lean, shoulder_y + 3), (x - limb // 2, shoulder_y + limb + swing), stroke)
+        pygame.draw.line(screen, color, (x + lean, shoulder_y + 3), (x + limb // 2, shoulder_y + limb - swing), stroke)
+        pygame.draw.line(screen, INK, (x, y), (x - limb // 3, y + limb - swing // 2), stroke)
+        pygame.draw.line(screen, INK, (x, y), (x + limb // 3, y + limb + swing // 2), stroke)
+        if sprinting:
+            for offset in (18, 30, 42):
+                pygame.draw.line(screen, PALE_BLUE, (x - int(offset * scale), shoulder_y + offset // 3), (x - int((offset + 12) * scale), shoulder_y + offset // 3), 3)
+
+    def _draw_hud(self, screen: pygame.Surface, width: int, height: int) -> None:
+        remaining = max(0, math.ceil(MEETING_SECONDS - self.elapsed))
+        timer = self.countdown_font.render(f"Meeting starts in 00:{remaining:02d}", True, WHITE)
+        timer_box = timer.get_rect(topleft=(22, 18)).inflate(24, 14)
+        pygame.draw.rect(screen, NAVY, timer_box, border_radius=10)
+        screen.blit(timer, timer.get_rect(center=timer_box.center))
+
+        bar_width = min(390, int(width * 0.43))
+        bar_x = width // 2 - bar_width // 2
+        draw_bar(screen, (bar_x, 84, bar_width, 15), self.course / 100, GREEN, back=BAR_BACK, radius=7)
+        draw_text_centered(screen, self.small_font, f"MEETING ROOM  {self.course:.0f}%", INK, (width // 2, 116))
+
+        cue, cue_color = self._cue()
+        cue_surface = self.cue_font.render(cue, True, WHITE)
+        cue_box = cue_surface.get_rect(midtop=(width // 2, 138)).inflate(36, 18)
+        pygame.draw.rect(screen, cue_color, cue_box, border_radius=12)
+        screen.blit(cue_surface, cue_surface.get_rect(center=cue_box.center))
+
+        status = self.font.render(self.status, True, WHITE)
+        status_box = status.get_rect(midtop=(width // 2, cue_box.bottom + 10)).inflate(24, 10)
+        pygame.draw.rect(screen, NAVY, status_box, border_radius=8)
+        screen.blit(status, status.get_rect(center=status_box.center))
+
+        if self.phase == "watching" and not self.caught_this_encounter:
+            draw_bar(screen, (width // 2 - 120, status_box.bottom + 8, 240, 9), self.exposure / CAUGHT_AFTER, RED, back=BAR_BACK, radius=4)
+
+        if self.mode == "calibrate":
+            overlay = pygame.Surface((width, height), pygame.SRCALPHA)
+            overlay.fill((13, 35, 57, 205))
+            screen.blit(overlay, (0, 0))
+            draw_text_centered(screen, self.heading_font, "GETTING YOUR BEARINGS", WHITE, (width // 2, height // 2 - 110))
+            self.draw_calibration(screen)
+
+    def _cue(self) -> tuple[str, tuple[int, int, int]]:
+        if self.chat_timer > 0:
+            return "QUICK CHAT", RED
+        if self.phase == "clear":
+            return "HALLWAY CLEAR - RUN", GREEN
+        if self.phase == "approaching":
+            return "ACT NATURAL!", AMBER
+        if self.phase == "watching":
+            return "WALK CASUALLY", BLUE
+        return "THEY'RE GONE - GO!", GREEN
+
+    def _draw_intro(self, screen: pygame.Surface, width: int, height: int) -> None:
+        overlay = pygame.Surface((width, height), pygame.SRCALPHA)
+        overlay.fill((13, 35, 57, 225))
+        screen.blit(overlay, (0, 0))
+        draw_text_centered(screen, self.heading_font, "LATE FOR YOUR MEETING", AMBER, (width // 2, height // 2 - 95))
+        draw_text_centered(screen, self.font, "Run when the hallway is clear.", WHITE, (width // 2, height // 2 - 25))
+        draw_text_centered(screen, self.font, "Stand still to walk casually past colleagues.", WHITE, (width // 2, height // 2 + 22))
+        draw_text_centered(screen, self.small_font, "The meeting clock starts when this message disappears.", PALE_BLUE, (width // 2, height // 2 + 78))
+
+    def _draw_result(self, screen: pygame.Surface, width: int, height: int) -> None:
+        overlay = pygame.Surface((width, height), pygame.SRCALPHA)
+        overlay.fill((13, 35, 57, 232))
+        screen.blit(overlay, (0, 0))
+        if self.result:
+            heading = "MADE IT"
+            line = "Morning. Been here ages."
+            color = GREEN
+        else:
+            heading = "TOO LATE"
+            line = "The meeting started without you."
+            color = RED
+        draw_text_centered(screen, self.heading_font, heading, color, (width // 2, height // 2 - 45))
+        draw_text_centered(screen, self.font, line, WHITE, (width // 2, height // 2 + 25))
