@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 import random
 from statistics import median
 
@@ -19,7 +20,6 @@ PULL_PROGRESS = 8.0
 PRINTER_RESISTANCE = 0.52
 RESISTANCE_DELAY = 0.85
 ROUND_SECONDS = 38.0
-INTRO_SECONDS = 3.8
 RESULT_SECONDS = 3.4
 
 WALL = (218, 218, 208)
@@ -51,6 +51,15 @@ class TugOfWar(CalibratedMinigame):
         self.clock_font = pygame.font.Font(None, 46)
         self.printer_font = pygame.font.Font(None, 25)
         self.result_font = pygame.font.Font(None, 58)
+        asset_dir = os.path.join(os.path.dirname(__file__), "assets")
+        self.room_source = pygame.image.load(os.path.join(asset_dir, "printer_room.png")).convert()
+        self.printer_source = pygame.image.load(os.path.join(asset_dir, "printer_machine.png")).convert_alpha()
+        self.paper_source = pygame.image.load(os.path.join(asset_dir, "printer_paper.png")).convert_alpha()
+        self.art_size: tuple[int, int] | None = None
+        self.room_art: pygame.Surface | None = None
+        self.printer_art: pygame.Surface | None = None
+        self.paper_art: pygame.Surface | None = None
+        self.paper_pile_art: pygame.Surface | None = None
         self.start()
 
     @property
@@ -69,7 +78,7 @@ class TugOfWar(CalibratedMinigame):
         self.result: bool | None = None
         self.result_time = 0.0
         self.elapsed = 0.0
-        self.intro_timer = INTRO_SECONDS
+        self.intro_timer = 0.0
         self.extraction = 0.0
         self.best_extraction = 0.0
         self.body_visible = False
@@ -125,10 +134,6 @@ class TugOfWar(CalibratedMinigame):
                 return
         else:
             reading = None
-
-        if self.intro_timer > 0:
-            self.intro_timer = max(0.0, self.intro_timer - dt)
-            return
 
         self.elapsed += dt
         self.idle_time += dt
@@ -221,7 +226,7 @@ class TugOfWar(CalibratedMinigame):
         self.result_time = 0.0
         self.pull_side = None
         self.printer_message = "Ready." if won else "Contact IT."
-        self.status = "First day survived." if won else "IT support is now offline."
+        self.status = "The paper is finally free." if won else "IT support is now offline."
 
     def draw(self, screen: pygame.Surface) -> None:
         width, height = screen.get_size()
@@ -238,78 +243,90 @@ class TugOfWar(CalibratedMinigame):
             draw_text_centered(screen, self.title_font, "PRINTER SETUP", WHITE, (width // 2, height // 2 - 115))
             self.draw_calibration(screen)
 
-        if self.intro_timer > 0 and self.mode == "play":
-            self._draw_intro(screen, width, height)
         if self.result is not None:
             self._draw_result(screen, width, height)
 
     def _draw_office(self, screen: pygame.Surface, width: int, height: int) -> None:
-        screen.fill(WALL)
-        pygame.draw.rect(screen, (184, 202, 210), (0, 0, width, int(height * 0.23)))
-        for x in range(0, width, 120):
-            pygame.draw.line(screen, WHITE, (x, 0), (x + 70, int(height * 0.23)), 3)
-        desk_y = int(height * 0.66)
-        pygame.draw.rect(screen, DESK, (0, desk_y, width, height - desk_y))
-        pygame.draw.rect(screen, DESK_EDGE, (0, desk_y, width, 18))
-        for y in range(desk_y + 35, height, 45):
-            pygame.draw.line(screen, (130, 92, 65), (0, y), (width, y + 12), 2)
+        self._prepare_art(width, height)
+        screen.blit(self.room_art, (0, 0))
 
-        clock_center = (int(width * 0.57), 72)
-        pygame.draw.circle(screen, WHITE, clock_center, 34)
-        pygame.draw.circle(screen, INK, clock_center, 34, 4)
-        angle_minute = -math.pi / 2 if self.result is True else -math.pi / 2 - math.pi / 30
-        pygame.draw.line(screen, INK, clock_center, (clock_center[0] + int(math.cos(angle_minute) * 24), clock_center[1] + int(math.sin(angle_minute) * 24)), 3)
-        pygame.draw.line(screen, INK, clock_center, (clock_center[0] + 6, clock_center[1] - 18), 5)
-        time_text = self.small_font.render("17:00" if self.result is True else "16:59", True, INK)
-        screen.blit(time_text, time_text.get_rect(midtop=(clock_center[0], clock_center[1] + 40)))
+        clock = pygame.Rect(0, 0, 116, 48)
+        clock.midtop = (width // 2, 18)
+        pygame.draw.rect(screen, (9, 28, 48), clock, border_radius=12)
+        pygame.draw.rect(screen, (239, 190, 91), clock, 2, border_radius=12)
+        time_text = self.clock_font.render("17:00" if self.result is True else "16:59", True, WHITE)
+        screen.blit(time_text, time_text.get_rect(center=clock.center))
+
+    def _prepare_art(self, width: int, height: int) -> None:
+        if self.art_size == (width, height):
+            return
+        self.art_size = (width, height)
+        self.room_art = pygame.transform.smoothscale(self.room_source, (width, height))
+        printer_h = int(height * 0.34)
+        printer_w = round(self.printer_source.get_width() * printer_h / self.printer_source.get_height())
+        printer = pygame.transform.smoothscale(self.printer_source, (printer_w, printer_h))
+        self.printer_art = pygame.transform.flip(printer, True, False)
+        paper_h = max(92, int(height * 0.18))
+        paper_w = int(width * 0.50)
+        self.paper_art = pygame.transform.smoothscale(self.paper_source, (paper_w, paper_h))
+        pile_h = max(68, int(height * 0.13))
+        pile_w = int(width * 0.24)
+        self.paper_pile_art = pygame.transform.smoothscale(self.paper_source, (pile_w, pile_h))
+
+    def _printer_rect(self, width: int, height: int) -> pygame.Rect:
+        rect = self.printer_art.get_rect()
+        rect.bottomright = (int(width * 0.94), int(height * 0.72))
+        return rect
 
     def _draw_printer(self, screen: pygame.Surface, width: int, height: int) -> None:
         shaking = self.pull_flash > 0 and self.result is None
         shake = int(math.sin(self.pull_flash * 90) * 5) if shaking else 0
-        printer = pygame.Rect(int(width * 0.59) + shake, int(height * 0.29), int(width * 0.31), int(height * 0.34))
-        pygame.draw.rect(screen, PRINTER_DARK, printer.move(9, 11), border_radius=18)
-        pygame.draw.rect(screen, PRINTER, printer, border_radius=18)
-        pygame.draw.rect(screen, (105, 114, 121), (printer.x + 20, printer.y + 20, printer.width - 40, 65), border_radius=8)
-        pygame.draw.rect(screen, PRINTER_DARK, (printer.x + 28, printer.y + 100, printer.width - 56, 30), border_radius=7)
-        display = pygame.Rect(printer.x + 38, printer.y + 145, printer.width - 76, 38)
-        pygame.draw.rect(screen, (17, 29, 28), display, border_radius=5)
-        display_color = GREEN if self.result is True else SCREEN
+        printer = self._printer_rect(width, height).move(shake, 0)
+        shadow = pygame.Surface((printer.width + 24, 32), pygame.SRCALPHA)
+        pygame.draw.ellipse(shadow, (31, 25, 21, 70), shadow.get_rect())
+        screen.blit(shadow, (printer.x - 4, printer.bottom - 15))
+        screen.blit(self.printer_art, printer)
+
+        display = pygame.Rect(
+            printer.x + int(printer.width * 0.08),
+            printer.y + int(printer.height * 0.36),
+            int(printer.width * 0.16),
+            max(24, int(printer.height * 0.105)),
+        )
+        pygame.draw.rect(screen, (12, 29, 42), display, border_radius=5)
+        display_color = GREEN if self.result is True else (153, 211, 242)
         message = self.printer_font.render(self.printer_message, True, display_color)
+        if message.get_width() > display.width - 6:
+            message = pygame.transform.smoothscale(
+                message, (display.width - 6, max(1, round(message.get_height() * (display.width - 6) / message.get_width())))
+            )
         screen.blit(message, message.get_rect(center=display.center))
         light = GREEN if self.result is True else RED
         if self.result is not True and int(self.elapsed * 5) % 2:
-            light = (85, 36, 38)
-        pygame.draw.circle(screen, light, (printer.right - 28, printer.y + 37), 8)
+            light = AMBER
+        light_pos = (printer.x + int(printer.width * 0.055), printer.y + int(printer.height * 0.37))
+        pygame.draw.circle(screen, (30, 36, 43), light_pos, 10)
+        pygame.draw.circle(screen, light, light_pos, 7)
 
     def _draw_paper(self, screen: pygame.Surface, width: int, height: int) -> None:
-        slot_x = int(width * 0.59) + 35
-        slot_y = int(height * 0.29) + 115
+        printer = self._printer_rect(width, height)
+        slot_x = printer.x + int(printer.width * 0.34)
+        slot_y = printer.y + int(printer.height * 0.70)
         progress = max(0.0, min(1.0, self.extraction / 100))
-        visible_length = 42 + int(progress * width * 0.34)
-        end_x = max(int(width * 0.2), slot_x - visible_length)
         twitch = int(math.sin(self.pull_flash * 100) * 5) if self.pull_flash > 0 else 0
-        paper_height = max(92, int(height * 0.18))
-        paper_rect = pygame.Rect(end_x, slot_y - paper_height // 2 + twitch, slot_x - end_x, paper_height)
-        pygame.draw.rect(screen, (205, 203, 191), paper_rect.move(5, 7), border_radius=4)
-        pygame.draw.rect(screen, PAPER, paper_rect, border_radius=4)
-        for line in range(3):
-            line_y = paper_rect.y + 26 + line * 20
-            pygame.draw.line(screen, PAPER_LINE, (end_x + 18, line_y), (slot_x - 16, line_y), 2)
+        visible_width = max(82, int(self.paper_art.get_width() * (0.16 + progress * 0.84)))
+        paper = pygame.transform.smoothscale(self.paper_art, (visible_width, self.paper_art.get_height()))
+        paper = pygame.transform.rotate(paper, -2 + math.sin(self.pull_flash * 80) * 2 if self.pull_flash > 0 else -2)
+        paper_rect = paper.get_rect(midright=(slot_x + 10, slot_y + twitch))
+        screen.blit(paper, paper_rect)
 
         pile_layers = int(progress * 8)
-        base_y = int(height * 0.76)
+        base_y = int(height * 0.68)
         for layer in range(pile_layers):
-            pile_width = int(width * (0.18 + layer * 0.018))
-            x = int(width * 0.12) + int(math.sin(layer * 1.7) * 18)
-            y = base_y + layer * 12
-            pygame.draw.ellipse(screen, (205, 203, 191), (x + 5, y + 5, pile_width, 30), 5)
-            pygame.draw.ellipse(screen, PAPER, (x, y, pile_width, 30), 6)
-
-        if self.result is True:
-            reveal = pygame.Rect(int(width * 0.12), int(height * 0.48), int(width * 0.42), 82)
-            pygame.draw.rect(screen, PAPER, reveal, border_radius=6)
-            pygame.draw.rect(screen, BLUE, reveal, width=3, border_radius=6)
-            draw_text_centered(screen, self.font, "Have a nice evening.", INK, reveal.center)
+            sheet = pygame.transform.rotate(self.paper_pile_art, -7 + (layer % 4) * 5)
+            x = int(width * 0.06) + int(math.sin(layer * 1.7) * 24)
+            y = base_y + layer * 10
+            screen.blit(sheet, sheet.get_rect(midleft=(x, y)))
 
     def _draw_hud(self, screen: pygame.Surface, width: int, height: int) -> None:
         title = self.title_font.render("ONE LAST PRINT", True, INK)
@@ -319,7 +336,7 @@ class TugOfWar(CalibratedMinigame):
 
         remaining = max(0, math.ceil(ROUND_SECONDS - self.elapsed))
         timer = self.clock_font.render(f"00:{remaining:02d}", True, RED if remaining <= 8 else INK)
-        screen.blit(timer, timer.get_rect(midtop=(width - 245, 22)))
+        screen.blit(timer, timer.get_rect(midtop=(int(width * 0.74), 22)))
 
         panel = pygame.Rect(20, 112, min(410, int(width * 0.48)), 70)
         pygame.draw.rect(screen, (29, 39, 47), panel, border_radius=12)
@@ -337,31 +354,26 @@ class TugOfWar(CalibratedMinigame):
             info = f"{detail} - camera tracking is required"
         draw_status_line(screen, self.small_font, info, INK)
 
-    def _draw_intro(self, screen: pygame.Surface, width: int, height: int) -> None:
-        overlay = pygame.Surface((width, height), pygame.SRCALPHA)
-        overlay.fill((20, 31, 40, 225))
-        screen.blit(overlay, (0, 0))
-        draw_text_centered(screen, self.title_font, "ONE LAST PRINT", AMBER, (width // 2, height // 2 - 100))
-        draw_text_centered(screen, self.font, "One last print. Then you can go home.", WHITE, (width // 2, height // 2 - 35))
-        draw_text_centered(screen, self.small_font, "Reach open hand, make a fist, pull to your chest, then alternate hands.", WHITE, (width // 2, height // 2 + 22))
-        draw_text_centered(screen, self.small_font, "Release, reach again, and keep alternating hands.", SCREEN, (width // 2, height // 2 + 62))
-
     def _draw_result(self, screen: pygame.Surface, width: int, height: int) -> None:
         overlay = pygame.Surface((width, height), pygame.SRCALPHA)
-        overlay.fill((18, 26, 32, 210))
+        overlay.fill((8, 23, 39, 190))
         screen.blit(overlay, (0, 0))
         if self.result:
-            heading = "FIRST DAY SURVIVED"
+            heading = "PRINT JOB COMPLETE"
+            line = "17:00. You are officially off the clock."
             color = GREEN
         else:
             heading = "CONTACT IT"
             line = "IT support is now offline."
             color = RED
-        draw_text_centered(screen, self.result_font, heading, color, (width // 2, height // 2 - 38))
+        card = pygame.Rect(0, 0, min(680, width - 60), 245 if self.result else 170)
+        card.center = (width // 2, height // 2)
+        pygame.draw.rect(screen, (9, 34, 57), card, border_radius=22)
+        pygame.draw.rect(screen, (76, 139, 181), card, 2, border_radius=22)
+        draw_text_centered(screen, self.result_font, heading, color, (width // 2, card.top + 48))
+        draw_text_centered(screen, self.font, line, WHITE, (width // 2, card.top + 96))
         if self.result:
-            reveal = pygame.Rect(width // 2 - 230, height // 2 + 4, 460, 70)
+            reveal = pygame.Rect(width // 2 - 230, card.top + 130, 460, 72)
             pygame.draw.rect(screen, PAPER, reveal, border_radius=7)
             pygame.draw.rect(screen, BLUE, reveal, width=3, border_radius=7)
             draw_text_centered(screen, self.font, "Have a nice evening.", INK, reveal.center)
-        else:
-            draw_text_centered(screen, self.font, line, WHITE, (width // 2, height // 2 + 28))

@@ -19,7 +19,7 @@ BEFORE_SCENES: dict[type[Minigame], tuple[Scene, ...]] = {
         Scene("receptionist_late", "Your meeting has already started. You should probably run.", "Receptionist"),
     ),
     simonsays: (
-        Scene("metting_late", "There you are. Sit down and try to follow who's speaking.", "Boss"),
+        Scene("metting_late", "There you are. Sit down and try to follow who's speaking.", "Colleague"),
     ),
     DodgeTheManager: (
         Scene("boss_looking", "The manager is looking for volunteers. Reach your office before he reaches you."),

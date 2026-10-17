@@ -88,9 +88,26 @@ class MinigameIntro(Screen):
         w = self._writer
         name_rect = w.draw(surface, self._name_font, action.name, self.TEXT_COLOR,
                            midtop=(center_x, top))
-        desc_rect = w.draw(surface, self._desc_font, action.description, self.DESC_COLOR,
-                           midtop=(center_x, name_rect.bottom + 12))
-        return desc_rect.bottom
+        bottom = name_rect.bottom + 12
+        for line in self._wrap(action.description, surface.get_width() // 2 - 80):
+            desc_rect = w.draw(surface, self._desc_font, line, self.DESC_COLOR,
+                               midtop=(center_x, bottom))
+            bottom = desc_rect.bottom + 5
+        return bottom
+
+    def _wrap(self, text: str, max_width: int) -> list[str]:
+        lines: list[str] = []
+        line = ""
+        for word in text.split():
+            trial = f"{line} {word}".strip()
+            if line and self._desc_font.size(trial)[0] > max_width:
+                lines.append(line)
+                line = word
+            else:
+                line = trial
+        if line:
+            lines.append(line)
+        return lines
 
     def _draw_button(self, surface: pygame.Surface, center_x: int, top: int) -> None:
         text = self._button_font.render("PINCH TO START", True, self.BUTTON_COLOR)

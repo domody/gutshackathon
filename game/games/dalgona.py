@@ -11,7 +11,7 @@ from game.ui import draw_bar, draw_camera_preview, draw_status_line, draw_text_c
 
 TOLERANCE = 0.034
 MAX_OFF_LINE = 0.085
-WIN_COVERAGE = 0.92
+WIN_COVERAGE = 0.99
 SAMPLE_SPACING = 6
 SLIDE_SECONDS = 0.72
 PAGE_PAUSE = 1.15

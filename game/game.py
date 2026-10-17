@@ -8,7 +8,7 @@ from game.scenes import AFTER_SCENES, BEFORE_SCENES, Scene
 from game.settings import Settings
 from game.tracking import HandTracker
 from game.ui import ScreenManager, draw_score
-from game.ui.screens import FailScreen, FiredScreen, Menu, MenuItem, MinigameIntro, PassScreen, SceneScreen
+from game.ui.screens import FailScreen, FinalScoreScreen, FiredScreen, Menu, MenuItem, MinigameIntro, PassScreen, SceneScreen
 
 
 class Game:
@@ -31,6 +31,8 @@ class Game:
         self.remaining: list[type[Minigame]] = []
         self.minigame: Minigame | None = None
         self.strikes = 0
+        self.total_score = 0
+        self.day_results: list[tuple[str, int, bool]] = []
         self.navigation_tracker = HandTracker()
         self.pinch_was_down = False
         self.ui = ScreenManager()
@@ -44,6 +46,7 @@ class Game:
     def start_game(self) -> None:
         self.strikes = 0
         self.total_score = 0
+        self.day_results = []
         self.remaining = self.minigames.copy()
         self.next_minigame()
 
@@ -85,7 +88,22 @@ class Game:
 
     def _after_result(self, game_type: type[Minigame], won: bool) -> None:
         scenes = AFTER_SCENES.get(game_type, ()) if won else ()
-        self._show_scene_sequence(scenes, self.next_minigame)
+        after = self.next_minigame if self.remaining else self.show_final_score
+        self._show_scene_sequence(scenes, after)
+
+    def show_final_score(self) -> None:
+        self.ui.show(FinalScoreScreen(
+            lambda: self.ui.dismiss(self._return_to_menu),
+            self.day_results,
+            self.total_score,
+            self.strikes,
+        ))
+
+    def _return_to_menu(self) -> None:
+        self.minigame = None
+        self.navigation_tracker.start()
+        self.pinch_was_down = False
+        self.ui.show(self.menu)
 
     def show_intro(self) -> None:
         """Overlay the intro on the minigame's first frame."""
@@ -144,6 +162,7 @@ class Game:
                 self.pinch_was_down = False
                 self.strikes = self.minigame.day_strikes
                 self.total_score += self.minigame.score
+                self.day_results.append((self.minigame.title, self.minigame.score, self.minigame.won))
                 game_type = type(self.minigame)
                 won = self.minigame.won
                 if (game_type is DodgeTheManager and self.minigame.phase == "volunteered"
@@ -186,7 +205,7 @@ class Game:
             self.ui.draw(self.screen)
         elif self.minigame:
             self.minigame.draw(self.screen)
-        if self.minigame:
+        if self.minigame and not getattr(self.ui.current, "suppress_corner_score", False):
             tracker = self.minigame.tracker
             result_screen = self.ui.current
             displayed_score = getattr(result_screen, "display_score", self.total_score)

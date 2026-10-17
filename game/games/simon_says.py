@@ -32,12 +32,18 @@ AMBER = (244, 177, 72)
 RED = (210, 78, 66)
 
 SPEECH = {
-    "left": ("Quick update from my side...", "Can everyone see my screen?",
-             "I'll circle back on that.", "One tiny blocker..."),
-    "forward": ("Let's align on priorities.", "This should only take a minute.",
-                "Moving to the next slide...", "Any questions before we start?"),
-    "right": ("Just to build on that...", "I have one quick thought.",
-              "Could we take this offline?", "You're still on mute."),
+    "left": ("Quick update from my side.", "Can everyone see my screen?",
+             "I'll circle back on that after lunch.", "I have one small blocker to raise.",
+             "The numbers are looking better this week.", "I sent the revised notes this morning.",
+             "We should check that with compliance.", "I can own the follow-up action."),
+    "forward": ("Let's align on today's priorities.", "This should only take a minute.",
+                "Moving to the next slide now.", "Any questions before we continue?",
+                "We need a decision before close of business.", "Let's keep the client outcome in mind.",
+                "The deadline has moved to Friday.", "We'll finish with the action points."),
+    "right": ("Just to build on that point.", "I have one quick thought to add.",
+              "Could we take the details offline?", "I think someone is still on mute.",
+              "The latest version is in the shared folder.", "That matches what the client requested.",
+              "I'll send a summary after the meeting.", "We can test that approach this afternoon."),
 }
 NAMES = {"left": "MAYA", "forward": "PRESENTER", "right": "JAMIE"}
 ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
@@ -195,20 +201,31 @@ class simonsays(FaceMinigame):
 
     def _draw_bubble(self, screen: pygame.Surface, x: int, text: str) -> None:
         font = self.small_font
-        surf = font.render(text, True, INK)
-        bw = min(238, surf.get_width() + 28)
+        max_text_width = 250
+        words = text.split()
+        lines: list[str] = []
+        line = ""
+        for word in words:
+            trial = f"{line} {word}".strip()
+            if line and font.size(trial)[0] > max_text_width:
+                lines.append(line)
+                line = word
+            else:
+                line = trial
+        if line:
+            lines.append(line)
+        bw = min(286, max(font.size(line)[0] for line in lines) + 28)
+        bh = 22 * len(lines) + 24
         bx = max(8, min(screen.get_width() - bw - 8, x - bw // 2))
         by = 145
-        pygame.draw.rect(screen, WHITE, (bx, by, bw, 48), border_radius=12)
-        pygame.draw.rect(screen, CHASE_BLUE, (bx, by, bw, 48), 3, border_radius=12)
+        pygame.draw.rect(screen, WHITE, (bx, by, bw, bh), border_radius=12)
+        pygame.draw.rect(screen, CHASE_BLUE, (bx, by, bw, bh), 3, border_radius=12)
         tip_x = max(bx + 22, min(bx + bw - 22, x))
-        pygame.draw.polygon(screen, WHITE, [(tip_x - 11, by + 46), (tip_x + 11, by + 46), (x, by + 61)])
+        pygame.draw.polygon(screen, WHITE, [(tip_x - 11, by + bh - 2), (tip_x + 11, by + bh - 2), (x, by + bh + 13)])
         pygame.draw.lines(screen, CHASE_BLUE, False,
-                          [(tip_x - 11, by + 46), (x, by + 61), (tip_x + 11, by + 46)], 3)
-        clipped = text
-        while font.size(clipped)[0] > bw - 20 and len(clipped) > 4:
-            clipped = clipped[:-4] + "..."
-        draw_text_centered(screen, font, clipped, INK, (bx + bw // 2, by + 24))
+                          [(tip_x - 11, by + bh - 2), (x, by + bh + 13), (tip_x + 11, by + bh - 2)], 3)
+        for index, line in enumerate(lines):
+            draw_text_centered(screen, font, line, INK, (bx + bw // 2, by + 17 + index * 22))
 
     def draw(self, screen: pygame.Surface) -> None:
         w, h = screen.get_size()
