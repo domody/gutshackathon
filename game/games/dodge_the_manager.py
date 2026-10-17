@@ -1,15 +1,3 @@
-"""Dodge the Manager: office-themed reskin of Dodge the Spotlight.
-
-Your manager is wandering the office looking for volunteers. Stay out of their line of
-sight for 15 seconds. If they spot you, you've been volunteered.
-
-Custom artwork (optional): drop PNGs (transparent background recommended) into an
-`assets/` folder next to this file. Any that are missing fall back to code-drawn art:
-    assets/manager.png     the manager (drawn at the head of the line of sight)
-    assets/employee.png    the player
-    assets/employee_volunteered.png   (optional) player with hand up, shown when nearly caught
-"""
-
 from __future__ import annotations
 
 import math
@@ -21,308 +9,284 @@ import pygame
 from game.face_minigame import FaceMinigame
 from game.minigame import Action
 from game.tracking import FaceTracker
-from game.ui import draw_bar, draw_camera_preview, draw_status_line
+from game.ui import draw_bar, draw_camera_preview, draw_status_line, draw_text_centered
 
-
-SURVIVE_SECONDS = 15.0
-
-# Player movement
-DEAD_ZONE = 0.08  # Ignore head turns smaller than this fraction of a full turn.
-PLAYER_SPEED = 2.0  # Maximum player speed in screen widths per second.
-EDGE_MARGIN = 0.04
-PLAYER_HALF_W = 16
-
-# Manager line of sight
-BEAM_HALF_W = 0.11  # Half-width of the sight cone as a fraction of screen width.
-WARN_SECONDS = 0.9
-EXPOSURE_UP_TIME = 0.18  # Seconds in the sight cone before the player is volunteered.
-EXPOSURE_DOWN_TIME = 0.6  # Seconds out of sight needed to clear exposure.
-MANAGER_Y = 112  # Vertical screen position of the manager's head.
-HAND_UP_AT = 0.5  # Exposure level at which the player's hand starts rising.
-
-BG = (18, 22, 34)
-WALL = (24, 29, 44)
-FLOOR = (34, 40, 58)
-PARTITION = (30, 36, 54)
-
-# Optional custom artwork.
+WALK_SECONDS = 24.0
+TILT_RANGE = 20.0
+DEAD_ZONE = 0.12
+PLAYER_SPEED = 1.7
+EDGE_MARGIN = 0.16
+WARN_SECONDS = 1.15
+APPROACH_SECONDS = 2.8
+CAUGHT_SECONDS = 0.55
 ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
-MANAGER_SPRITE_H = 96
-EMPLOYEE_SPRITE_H = 84
+
+NAVY = (7, 34, 66)
+BLUE = (17, 92, 170)
+PALE_BLUE = (102, 190, 234)
+WHITE = (250, 249, 242)
+INK = (20, 34, 48)
+GREEN = (64, 177, 112)
+RED = (212, 69, 61)
+SHADOW = (18, 30, 40, 75)
 
 
-def _load_sprite(filename: str, height: int) -> pygame.Surface | None:
-    """Load an optional PNG scaled to `height`. Missing/broken files return None."""
-    path = os.path.join(ASSET_DIR, filename)
-    if not os.path.exists(path):
-        return None
-    try:
-        img = pygame.image.load(path)
-        if pygame.display.get_surface():
-            img = img.convert_alpha()
-        iw, ih = img.get_size()
-        return pygame.transform.smoothscale(img, (max(1, int(iw * height / ih)), height))
-    except Exception as exc:
-        print(f"Could not load {path}: {exc!r} (using built-in art)")
-        return None
+def _load_image(filename: str) -> pygame.Surface:
+    image = pygame.image.load(os.path.join(ASSET_DIR, filename))
+    if pygame.display.get_surface():
+        image = image.convert_alpha()
+    return image
+
+
+def _scale_height(image: pygame.Surface, height: int) -> pygame.Surface:
+    width = max(1, round(image.get_width() * height / image.get_height()))
+    return pygame.transform.smoothscale(image, (width, height))
 
 
 class DodgeTheManager(FaceMinigame):
-    """The manager sweeps the office asking for volunteers. Stay out of sight for 15 seconds."""
-
-    title = "Dodge the Manager"
+    title = "Any Volunteers?"
 
     def __init__(self, screen: pygame.Surface, tracker: FaceTracker | None = None) -> None:
         super().__init__(screen, tracker)
-        self._overlay: pygame.Surface | None = None
-        self.manager_sprite = _load_sprite("manager.png", MANAGER_SPRITE_H)
-        self.employee_sprite = _load_sprite("employee.png", EMPLOYEE_SPRITE_H)
-        self.employee_hand_sprite = _load_sprite("employee_volunteered.png", EMPLOYEE_SPRITE_H)
+        self.hallway_source = _load_image("volunteer_hallway.png")
+        self.player_source = _load_image("volunteer_player.png")
+        self.manager_source = _load_image("volunteer_manager.png")
+        self._scene_size: tuple[int, int] | None = None
+        self.hallway: pygame.Surface | None = None
+        self.player_sprite: pygame.Surface | None = None
+        self.manager_sprite: pygame.Surface | None = None
+        self.manager_flipped: pygame.Surface | None = None
+        self.player_sizes: dict[int, pygame.Surface] = {}
+        self.manager_sizes: dict[tuple[int, bool], pygame.Surface] = {}
         self.start()
 
-    # Actions shown on the game intro screen.
     @property
     def actions(self) -> tuple[Action, Action]:
         return (
-            Action("Lean Left", "Turn your head left to slide left"),
-            Action("Lean Right", "Turn your head right to slide right"),
+            Action("Tilt Left", "Tilt your head left to move across the hallway"),
+            Action("Tilt Right", "Tilt your head right to dodge the manager"),
         )
 
     def start(self) -> None:
         super().start()
         self.elapsed = 0.0
-
-        self.player_u = 0.5  # Player's horizontal screen position, normalized from 0 to 1.
+        self.progress = 0.0
+        self.player_u = 0.5
         self.target_u = 0.5
+        self.phase = "clear"
+        self.phase_t = 0.0
+        self.clear_duration = 2.3
+        self.side = random.choice((-1, 1))
+        self.manager_u = -0.2
+        self.caught = 0.0
+        self.encounters = 0
+        self.bubble_t = 0.0
 
-        self.light_phase = "idle"  # Manager state: idle, warn or sweep.
-        self.light_t = 0.0
-        self.idle_dur = 0.8
-        self.side = -1  # Sweep direction: -1 enters from left, +1 enters from right.
-        self.reach = 0.6  # Maximum sweep distance from the entry edge, as a screen fraction.
-        self.sweep_dur = 2.4
-        self.beam_u: float | None = None
-        self.exposure = 0.0
-        self.lit = False
-
-    # Update player movement and the manager's search.
     def update(self, dt: float) -> None:
         if self.finished:
             return
-
+        dt = min(dt, 0.1)
         if self.mode == "calibrate":
             self.update_calibration(dt)
-            self._move_player(dt)
             return
+
+        offsets = self.read_offsets()
+        if offsets is None and self.tracker.available:
+            return
+        if offsets is not None:
+            self._update_control(offsets[1])
 
         self.elapsed += dt
-        self._update_control()
+        self.progress = min(1.0, self.elapsed / WALK_SECONDS)
         self._move_player(dt)
-        self._update_light(dt)
-        self._update_exposure(dt)
-
-        if self.exposure >= 1.0:
+        self._update_manager(dt)
+        if self.caught >= 1.0:
             self.finish(False)
-        elif self.elapsed >= SURVIVE_SECONDS:
+        elif self.progress >= 1.0:
             self.finish(True)
 
-    def _update_control(self) -> None:
-        offsets = self.read_offsets()
-        if offsets is None:
-            return  # Keep the last position until the face is visible again.
-        off = max(-1.0, min(1.0, offsets[0]))
-        if abs(off) < DEAD_ZONE:
-            off = 0.0
+    def _update_control(self, roll: float) -> None:
+        amount = max(-1.0, min(1.0, roll / TILT_RANGE))
+        if abs(amount) < DEAD_ZONE:
+            amount = 0.0
         else:
-            off = math.copysign((abs(off) - DEAD_ZONE) / (1 - DEAD_ZONE), off)
-        self.target_u = 0.5 + 0.5 * off
+            amount = math.copysign((abs(amount) - DEAD_ZONE) / (1.0 - DEAD_ZONE), amount)
+        self.target_u = 0.5 + amount * 0.5
 
     def _move_player(self, dt: float) -> None:
-        target = max(EDGE_MARGIN, min(1 - EDGE_MARGIN, self.target_u))
-        delta = (target - self.player_u) * min(1.0, 14.0 * dt)
+        target = max(EDGE_MARGIN, min(1.0 - EDGE_MARGIN, self.target_u))
+        distance = target - self.player_u
         step = PLAYER_SPEED * dt
-        self.player_u += max(-step, min(step, delta))
+        self.player_u += max(-step, min(step, distance * min(1.0, dt * 12.0)))
 
-    def _begin_warn(self) -> None:
-        progress = min(1.0, self.elapsed / SURVIVE_SECONDS)
-        # Usually enter from the player's side so they must cross the screen to escape.
-        on_side = -1 if self.player_u < 0.5 else 1
-        self.side = on_side if random.random() < 0.7 else -on_side
-        self.reach = random.uniform(0.50 + 0.10 * progress, 0.68 + 0.12 * progress)
-        self.sweep_dur = 2.4 - 0.7 * progress
-        self.light_phase = "warn"
-        self.light_t = 0.0
+    def _begin_encounter(self) -> None:
+        self.phase = "warning"
+        self.phase_t = 0.0
+        self.side = random.choice((-1, 1))
+        self.bubble_t = WARN_SECONDS + 0.7
+        self.encounters += 1
 
-    def _update_light(self, dt: float) -> None:
-        self.light_t += dt
-        if self.light_phase == "idle":
-            self.beam_u = None
-            if self.light_t >= self.idle_dur:
-                self._begin_warn()
-        elif self.light_phase == "warn":
-            if self.light_t >= WARN_SECONDS:
-                self.light_phase, self.light_t = "sweep", 0.0
+    def _update_manager(self, dt: float) -> None:
+        self.phase_t += dt
+        self.bubble_t = max(0.0, self.bubble_t - dt)
+        start = -0.13 if self.side < 0 else 1.13
+        destination = 0.38 if self.side < 0 else 0.62
+
+        if self.phase == "clear":
+            self.manager_u = start
+            self.caught = max(0.0, self.caught - dt / 0.45)
+            if self.phase_t >= self.clear_duration:
+                self._begin_encounter()
+            return
+
+        if self.phase == "warning":
+            reveal = min(1.0, self.phase_t / WARN_SECONDS)
+            self.manager_u = start + (destination - start) * 0.25 * reveal
+            self.caught = max(0.0, self.caught - dt / 0.45)
+            if self.phase_t >= WARN_SECONDS:
+                self.phase = "approach"
+                self.phase_t = 0.0
+            return
+
+        p = min(1.0, self.phase_t / APPROACH_SECONDS)
+        travel = math.sin(math.pi * p)
+        self.manager_u = start + (destination - start) * travel
+        danger = 0.2 < p < 0.8 and abs(self.player_u - self.manager_u) < 0.13
+        if danger:
+            self.caught = min(1.0, self.caught + dt / CAUGHT_SECONDS)
         else:
-            p = self.light_t / self.sweep_dur
-            if p >= 1.0:
-                self.light_phase, self.light_t = "idle", 0.0
-                self.idle_dur = random.uniform(0.4, 0.8)
-                self.beam_u = None
-            else:
-                lead = self.reach * math.sin(math.pi * p)  # Move the sight cone outward and back.
-                if self.side < 0:
-                    self.beam_u = lead - BEAM_HALF_W
-                else:
-                    self.beam_u = 1.0 - lead + BEAM_HALF_W
+            self.caught = max(0.0, self.caught - dt / 0.4)
+        if p >= 1.0:
+            self.phase = "clear"
+            self.phase_t = 0.0
+            self.clear_duration = random.uniform(1.4, 2.2)
+            self.caught = 0.0
 
-    def _update_exposure(self, dt: float) -> None:
-        w = self.screen.get_width()
-        self.lit = (
-            self.beam_u is not None
-            and abs(self.player_u * w - self.beam_u * w) < BEAM_HALF_W * w + PLAYER_HALF_W * 0.5
-        )
-        if self.lit:
-            self.exposure = min(1.0, self.exposure + dt / EXPOSURE_UP_TIME)
-        else:
-            self.exposure = max(0.0, self.exposure - dt / EXPOSURE_DOWN_TIME)
+    def _prepare_art(self, w: int, h: int) -> None:
+        if self._scene_size == (w, h):
+            return
+        self._scene_size = (w, h)
+        self.hallway = pygame.transform.smoothscale(self.hallway_source, (w, h))
+        player_h = max(150, int(h * 0.36))
+        manager_h = max(165, int(h * 0.38))
+        self.player_sprite = _scale_height(self.player_source, player_h)
+        self.manager_sprite = _scale_height(self.manager_source, manager_h)
+        self.manager_flipped = pygame.transform.flip(self.manager_sprite, True, False)
+        self.player_sizes.clear()
+        self.manager_sizes.clear()
 
-    # Draw the office, manager and player.
+    def _project(self, u: float, depth: float, w: int, h: int) -> tuple[int, int, int]:
+        perspective = depth ** 0.78
+        floor_width = w * (0.72 + (0.08 - 0.72) * perspective)
+        x = w * 0.5 + (u - 0.5) * floor_width
+        bottom = (h - 18) + (h * 0.515 - (h - 18)) * perspective
+        height = h * (0.36 + (0.115 - 0.36) * perspective)
+        return int(x), int(bottom), max(54, int(height))
+
+    def _player_at_height(self, height: int) -> pygame.Surface:
+        height = max(4, round(height / 4) * 4)
+        if height not in self.player_sizes:
+            self.player_sizes[height] = _scale_height(self.player_sprite, height)
+        return self.player_sizes[height]
+
+    def _manager_at_height(self, height: int) -> pygame.Surface:
+        height = max(4, round(height / 4) * 4)
+        flipped = self.side < 0
+        key = (height, flipped)
+        if key not in self.manager_sizes:
+            source = self.manager_flipped if flipped else self.manager_sprite
+            self.manager_sizes[key] = _scale_height(source, height)
+        return self.manager_sizes[key]
+
     def draw(self, screen: pygame.Surface) -> None:
         w, h = screen.get_size()
-        ground_y = h - 110
-        screen.fill(BG)
-        pygame.draw.rect(screen, WALL, (0, 0, w, ground_y + 40))
-        self._draw_cubicles(screen, w, ground_y)
-        pygame.draw.rect(screen, FLOOR, (0, ground_y + 40, w, h - ground_y - 40))
+        self._prepare_art(w, h)
+        screen.blit(self.hallway, (0, 0))
 
-        if self._overlay is None or self._overlay.get_size() != (w, h):
-            self._overlay = pygame.Surface((w, h), pygame.SRCALPHA)
-        overlay = self._overlay
-        overlay.fill((0, 0, 0, 0))
+        shade = pygame.Surface((w, h), pygame.SRCALPHA)
+        shade.fill((4, 25, 48, 22))
+        pygame.draw.rect(shade, (255, 244, 220, 28), (0, int(h * 0.48), w, int(h * 0.52)))
+        screen.blit(shade, (0, 0))
 
-        playing = self.mode == "play"
-        if playing and self.light_phase in ("warn", "sweep"):
-            zone_w = int(self.reach * w)
-            x0 = 0 if self.side < 0 else w - zone_w
-            alpha = 35
-            if self.light_phase == "warn":
-                alpha += int(25 * math.sin(self.light_t * 10))
-            pygame.draw.rect(overlay, (255, 40, 40, alpha), (x0, 0, zone_w, h))
-
-        if self.beam_u is not None:
-            cx, hw = int(self.beam_u * w), int(BEAM_HALF_W * w)
-            floor_c = ground_y + 55
-            top = ground_y - 40
-            # Draw the manager's sight cone from their eyes to the floor.
-            pygame.draw.polygon(overlay, (255, 235, 150, 70), [
-                (cx - 14, MANAGER_Y), (cx + 14, MANAGER_Y), (cx + hw, top),
-                (cx + hw, floor_c), (cx - hw, floor_c), (cx - hw, top)])
-            pygame.draw.ellipse(overlay, (255, 240, 170, 130), (cx - hw, floor_c - 30, 2 * hw, 60))
-        screen.blit(overlay, (0, 0))
-
-        if playing and self.light_phase == "warn":
-            self._draw_warning(screen, w, h)
-        if self.beam_u is not None:
-            self._draw_manager(screen, int(self.beam_u * w), w, speaking=True)
-        self._draw_player(screen, ground_y, w)
+        manager_visible = self.phase in ("warning", "approach") and self.mode != "calibrate"
+        self._draw_player(screen, w, h)
+        if manager_visible:
+            self._draw_manager(screen, w, h)
         self._draw_hud(screen, w, h)
 
-    def _draw_cubicles(self, screen: pygame.Surface, w: int, ground_y: int) -> None:
-        """Faint cubicle partitions along the back wall."""
-        step = max(120, w // 7)
-        for x in range(step // 2, w, step):
-            pygame.draw.rect(screen, PARTITION, (x, ground_y - 70, 8, 110), border_radius=3)
-            pygame.draw.rect(screen, PARTITION, (x, ground_y - 70, step - 30, 8), border_radius=3)
+        if self.mode == "calibrate":
+            overlay = pygame.Surface((w, h), pygame.SRCALPHA)
+            overlay.fill((7, 34, 66, 155))
+            screen.blit(overlay, (0, 0))
+            self.draw_calibration(screen)
 
-    def _draw_manager(self, screen: pygame.Surface, cx: int, w: int, speaking: bool) -> None:
-        y = MANAGER_Y
-        if self.manager_sprite is not None:
-            sp = self.manager_sprite
-            screen.blit(sp, (cx - sp.get_width() // 2, y - sp.get_height() // 2))
-        else:
-            pygame.draw.rect(screen, (50, 55, 80), (cx - 22, y + 10, 44, 46), border_radius=8)  # Draw the suit.
-            pygame.draw.polygon(screen, (235, 235, 240), [(cx - 8, y + 10), (cx + 8, y + 10), (cx, y + 26)])  # Draw the shirt.
-            pygame.draw.polygon(screen, (200, 50, 60), [(cx - 4, y + 14), (cx + 4, y + 14), (cx + 3, y + 40), (cx, y + 44), (cx - 3, y + 40)])  # Draw the tie.
-            pygame.draw.circle(screen, (235, 190, 160), (cx, y - 6), 20)  # Draw the head.
-            pygame.draw.circle(screen, (20, 20, 30), (cx, y - 6), 20, 3)
-            pygame.draw.rect(screen, (30, 30, 40), (cx - 15, y - 12, 12, 8), 2, border_radius=2)  # Draw the glasses.
-            pygame.draw.rect(screen, (30, 30, 40), (cx + 3, y - 12, 12, 8), 2, border_radius=2)
-            pygame.draw.line(screen, (30, 30, 40), (cx - 3, y - 8), (cx + 3, y - 8), 2)
-            pygame.draw.line(screen, (120, 60, 50), (cx - 6, y + 4), (cx + 6, y + 4), 2)  # Draw the mouth.
+    def _draw_player(self, screen: pygame.Surface, w: int, h: int) -> None:
+        px, bottom, sprite_h = self._project(self.player_u, self.progress, w, h)
+        sprite = self._player_at_height(sprite_h)
+        bob_strength = max(1.0, 4.0 * (1.0 - self.progress) + 1.0)
+        bob = int(math.sin(self.elapsed * 10.0) * bob_strength)
+        bottom += bob
+        shadow_w = max(46, sprite.get_width() // 2)
+        shadow_h = max(6, int(18 * sprite_h / max(1, h * 0.36)))
+        shadow = pygame.Surface((shadow_w, shadow_h), pygame.SRCALPHA)
+        pygame.draw.ellipse(shadow, SHADOW, shadow.get_rect())
+        screen.blit(shadow, (px - shadow_w // 2, bottom - shadow_h // 2))
+        screen.blit(sprite, (px - sprite.get_width() // 2, bottom - sprite.get_height()))
 
-        if speaking:
-            text = self.small_font.render("Any volunteers?", True, (30, 30, 40))
-            bw, bh = text.get_width() + 18, text.get_height() + 12
-            bx = max(6, min(w - bw - 6, cx + 26))
-            by = y - 48
-            pygame.draw.rect(screen, (250, 250, 245), (bx, by, bw, bh), border_radius=8)
-            pygame.draw.rect(screen, (30, 30, 40), (bx, by, bw, bh), 2, border_radius=8)
-            tail_x = max(bx + 10, min(bx + bw - 10, cx + 20))
-            pygame.draw.polygon(screen, (250, 250, 245), [(tail_x - 6, by + bh - 1), (tail_x + 6, by + bh - 1), (cx + 12, y - 28)])
-            screen.blit(text, (bx + 9, by + 6))
+    def _draw_manager(self, screen: pygame.Surface, w: int, h: int) -> None:
+        manager_depth = max(0.0, self.progress - 0.035)
+        mx, bottom, player_h = self._project(self.manager_u, manager_depth, w, h)
+        sprite = self._manager_at_height(int(player_h * 1.06))
+        bob_strength = max(1.0, 3.0 * (1.0 - manager_depth) + 1.0)
+        bob = int(math.sin(self.phase_t * 8.0) * bob_strength)
+        bottom += bob
+        shadow_w = max(50, sprite.get_width() // 2)
+        shadow_h = max(6, int(18 * sprite.get_height() / max(1, h * 0.38)))
+        shadow = pygame.Surface((shadow_w, shadow_h), pygame.SRCALPHA)
+        pygame.draw.ellipse(shadow, SHADOW, shadow.get_rect())
+        screen.blit(shadow, (mx - shadow_w // 2, bottom - shadow_h // 2))
+        screen.blit(sprite, (mx - sprite.get_width() // 2, bottom - sprite.get_height()))
+        if self.bubble_t > 0.0:
+            sprite_top = bottom - sprite.get_height()
+            self._draw_bubble(screen, mx, max(88, sprite_top - 70), w)
 
-    def _draw_warning(self, screen: pygame.Surface, w: int, h: int) -> None:
-        if int(self.light_t * 8) % 2:
-            return
-        for i in range(3):
-            if self.side < 0:
-                x = 20 + i * 26
-                pts = [(x, h // 2 - 20), (x + 20, h // 2), (x, h // 2 + 20)]
-            else:
-                x = w - 20 - i * 26
-                pts = [(x, h // 2 - 20), (x - 20, h // 2), (x, h // 2 + 20)]
-            pygame.draw.polygon(screen, (255, 90, 90), pts)
-        text = "MANAGER COMING FROM THE " + ("LEFT" if self.side < 0 else "RIGHT") + " - LOOK BUSY!"
-        surf = self.font.render(text, True, (255, 120, 120))
-        screen.blit(surf, ((w - surf.get_width()) // 2, 60))
-
-    def _draw_player(self, screen: pygame.Surface, ground_y: int, w: int) -> None:
-        px = int(self.player_u * w)
-        e = self.exposure
-        pygame.draw.ellipse(screen, (6, 6, 10), (px - 24, ground_y + 22, 48, 14))
-
-        sprite = self.employee_sprite
-        if e >= HAND_UP_AT and self.employee_hand_sprite is not None:
-            sprite = self.employee_hand_sprite
-        if sprite is not None:
-            screen.blit(sprite, (px - sprite.get_width() // 2, ground_y + 30 - sprite.get_height()))
-        else:
-            # Shift the shirt from green to red as exposure rises.
-            color = (80 + int(175 * e), 200 - int(130 * e), 120 - int(80 * e))
-            pygame.draw.rect(screen, color, (px - PLAYER_HALF_W, ground_y - 14, PLAYER_HALF_W * 2, 44),
-                             border_radius=8)
-            pygame.draw.polygon(screen, (40, 50, 90), [(px - 3, ground_y - 12), (px + 3, ground_y - 12), (px, ground_y + 10)])  # Draw the tie.
-            pygame.draw.circle(screen, (235, 190, 160), (px, ground_y - 30), 14)
-            pygame.draw.circle(screen, (20, 20, 30), (px, ground_y - 30), 14, 2)
-            if e >= HAND_UP_AT:
-                # Raise the player's hand as exposure approaches a loss.
-                lift = (e - HAND_UP_AT) / (1 - HAND_UP_AT)
-                hand_y = ground_y - 10 - int(46 * lift)
-                pygame.draw.line(screen, color, (px + PLAYER_HALF_W - 2, ground_y - 6), (px + 13, hand_y), 6)
-                pygame.draw.circle(screen, (235, 190, 160), (px + 26, hand_y), 6)
-
-        if e > 0.05:
-            pygame.draw.circle(screen, (255, int(200 - 150 * e), 60), (px, ground_y - 4), 46, max(1, int(2 + 4 * e)))
+    def _draw_bubble(self, screen: pygame.Surface, cx: int, y: int, w: int) -> None:
+        text = self.font.render("Got a minute?", True, INK)
+        bw, bh = text.get_width() + 34, text.get_height() + 20
+        bx = max(10, min(w - bw - 10, cx - bw // 2))
+        pygame.draw.rect(screen, WHITE, (bx, y, bw, bh), border_radius=14)
+        pygame.draw.rect(screen, NAVY, (bx, y, bw, bh), 3, border_radius=14)
+        tip_x = max(bx + 18, min(bx + bw - 18, cx))
+        pygame.draw.polygon(screen, WHITE, [(tip_x - 10, y + bh - 2),
+                                             (tip_x + 10, y + bh - 2), (cx, y + bh + 16)])
+        pygame.draw.lines(screen, NAVY, False, [(tip_x - 10, y + bh - 2),
+                                                (cx, y + bh + 16), (tip_x + 10, y + bh - 2)], 3)
+        screen.blit(text, (bx + 17, y + 10))
 
     def _draw_hud(self, screen: pygame.Surface, w: int, h: int) -> None:
-        remaining = max(0.0, SURVIVE_SECONDS - self.elapsed)
-        screen.blit(self.font.render(f"{remaining:.1f}s", True, (240, 240, 240)), (10, 10))
+        panel = pygame.Surface((w, 82), pygame.SRCALPHA)
+        panel.fill((7, 34, 66, 225))
+        screen.blit(panel, (0, 0))
+        screen.blit(self.font.render("ANY VOLUNTEERS?", True, WHITE), (18, 13))
+        screen.blit(self.small_font.render("Make it to your office without getting stopped", True, PALE_BLUE),
+                    (18, 47))
 
-        # Show how close the player is to being volunteered.
-        bx, by, bw, bh = w // 2 - 100, 14, 200, 12
-        draw_bar(screen, (bx, by, bw, bh), self.exposure, (230, 60, 60))
-        label = self.small_font.render("VOLUNTEERED", True, (200, 200, 200))
-        screen.blit(label, (w // 2 - label.get_width() // 2, by + bh + 4))
+        bx, by, bw = int(w * 0.56), 22, int(w * 0.20)
+        draw_bar(screen, (bx, by, bw, 15), self.progress, GREEN, back=(46, 70, 91), radius=7)
+        draw_text_centered(screen, self.small_font, "OFFICE", WHITE, (bx + bw // 2, by + 30))
+
+        if self.phase == "warning" and self.mode != "calibrate":
+            side = "LEFT" if self.side < 0 else "RIGHT"
+            draw_text_centered(screen, self.font, f"MANAGER FROM THE {side}", RED, (w // 2, 112))
+
+        if self.caught > 0.04:
+            draw_bar(screen, (w // 2 - 105, h - 44, 210, 14), self.caught, RED,
+                     back=(70, 62, 57), radius=7)
+            draw_text_centered(screen, self.small_font, "DON'T GET VOLUNTEERED", WHITE,
+                               (w // 2, h - 60))
 
         draw_camera_preview(screen, self.tracker)
-
-        if self.tracker.available:
-            info = f"Head tracking: {self.tracker.backend}"
-        else:
-            info = "Camera tracking unavailable"
+        info = f"Head tilt: {self.tracker.backend}" if self.tracker.available else "Camera tracking unavailable"
         draw_status_line(screen, self.small_font, info)
-
-        if self.mode == "calibrate":
-            self.draw_calibration(screen)
-        else:
+        if self.mode != "calibrate":
             self.draw_face_lost(screen, h // 2)

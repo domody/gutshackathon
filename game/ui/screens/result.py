@@ -64,3 +64,9 @@ class FailScreen(ResultScreen):
     TITLE = "You Fail"
     DESCRIPTION = "Better luck next time."
     TITLE_COLOR = (235, 90, 90)
+
+
+class FiredScreen(ResultScreen):
+    TITLE = "You're Fired"
+    DESCRIPTION = "Three strikes. Pack up your desk."
+    TITLE_COLOR = (235, 90, 90)

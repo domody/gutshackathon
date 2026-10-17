@@ -103,7 +103,7 @@ class Dalgona(Minigame):
         rect = self.paper_rect
         left = rect.x + int(rect.width * 0.19)
         right = rect.right - int(rect.width * 0.14)
-        center_y = rect.y + int(rect.height * 0.76)
+        center_y = rect.y + int(rect.height * 0.81)
         width = right - left
         points: list[tuple[float, float]] = []
         count = max(80, int(width / SAMPLE_SPACING) * 2)
@@ -184,8 +184,6 @@ class Dalgona(Minigame):
                     self.status = "Try again - keep the pen inside the guide"
             elif self.state == "name_complete":
                 self._begin_page(0)
-            elif self.page_index == 0:
-                self._begin_page(1)
             else:
                 self.result = True
                 self.end_timer = 0.0
@@ -321,6 +319,8 @@ class Dalgona(Minigame):
         pygame.draw.line(screen, MUTED, (card.x + 95, line_y), (card.right - 95, line_y), 2)
         draw_text_centered(screen, self.small_font, "Lift your fingers between W and M", BLUE, (width // 2, line_y + 30))
         draw_bar(screen, (card.x + 120, card.bottom - 35, card.width - 240, 10), self.coverage / WIN_COVERAGE, GREEN, back=(210, 210, 201), radius=5)
+        footer = self.small_font.render("Page 1 of 2", True, MUTED)
+        screen.blit(footer, footer.get_rect(midbottom=(card.centerx, card.bottom - 8)))
         if self.state == "name_complete":
             draw_text_centered(screen, self.font, "NAME ADDED", GREEN, (width // 2, card.bottom - 64))
         elif self.state == "retry":
@@ -334,7 +334,7 @@ class Dalgona(Minigame):
         pygame.draw.rect(screen, PAPER, rect, border_radius=5)
         pygame.draw.rect(screen, (221, 216, 201), rect, width=2, border_radius=5)
 
-        page_title = "INTERNSHIP AGREEMENT" if self.page_index == 0 else "NON-DISCLOSURE AGREEMENT"
+        page_title = "INTERNSHIP AGREEMENT + NDA"
         title = self.heading_font.render(page_title, True, INK)
         if title.get_width() > rect.width - 50:
             title = self.document_font.render(page_title, True, INK)
@@ -348,17 +348,20 @@ class Dalgona(Minigame):
         pygame.draw.line(screen, INK, (rect.x + 45, rect.y + 176), (rect.right - 45, rect.y + 176), 2)
 
         lines = (
-            ("I agree to attend meetings, answer emails, and pretend", "to understand the shared drive naming convention."),
-            ("I agree not to disclose confidential information,", "including who keeps stealing lunch from the fridge."),
-        )[self.page_index]
+            "INTERNSHIP: I agree to attend meetings, answer emails,",
+            "and pretend to understand the shared drive",
+            "naming convention.",
+            "NDA: I agree not to disclose confidential information,",
+            "including who keeps stealing lunch from the fridge.",
+        )
         for index, line in enumerate(lines):
             body = self.body_font.render(line, True, INK)
-            screen.blit(body, (rect.x + 48, rect.y + 205 + index * 34))
+            screen.blit(body, (rect.x + 48, rect.y + 190 + index * 22))
 
-        signature_y = rect.y + int(rect.height * 0.63)
+        signature_y = rect.y + int(rect.height * 0.70)
         label = self.small_font.render("AUTHORIZED SIGNATURE - TRACE THE GUIDE", True, BLUE)
         screen.blit(label, (rect.x + 48, signature_y))
-        pygame.draw.line(screen, MUTED, (rect.x + 48, rect.y + int(rect.height * 0.84)), (rect.right - 48, rect.y + int(rect.height * 0.84)), 2)
+        pygame.draw.line(screen, MUTED, (rect.x + 48, rect.y + int(rect.height * 0.89)), (rect.right - 48, rect.y + int(rect.height * 0.89)), 2)
 
         if abs(offset) < 1:
             for sample, done in zip(self.samples, self.covered):
@@ -370,7 +373,7 @@ class Dalgona(Minigame):
                     color = SIGNED if second[2] else BAD
                     pygame.draw.line(screen, color, (first[0], first[1]), (second[0], second[1]), 4)
 
-        footer = self.small_font.render(f"Page {self.page_index + 1} of 2", True, MUTED)
+        footer = self.small_font.render("Page 2 of 2", True, MUTED)
         screen.blit(footer, footer.get_rect(midbottom=(rect.centerx, rect.bottom - 18)))
 
         if self.state == "page_complete":

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 import random
 from statistics import median
 
@@ -43,6 +44,19 @@ AMBER = (245, 178, 55)
 RED = (219, 69, 72)
 GREEN = (72, 177, 113)
 BAR_BACK = (58, 70, 80)
+ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+
+
+def _load_image(filename: str) -> pygame.Surface:
+    image = pygame.image.load(os.path.join(ASSET_DIR, filename))
+    if pygame.display.get_surface():
+        image = image.convert_alpha()
+    return image
+
+
+def _scale_height(image: pygame.Surface, height: int) -> pygame.Surface:
+    width = max(1, round(image.get_width() * height / image.get_height()))
+    return pygame.transform.smoothscale(image, (width, height))
 
 
 class RedLightGreenLight(CalibratedMinigame):
@@ -55,6 +69,17 @@ class RedLightGreenLight(CalibratedMinigame):
         self.heading_font = pygame.font.Font(None, 62)
         self.countdown_font = pygame.font.Font(None, 42)
         self.cue_font = pygame.font.Font(None, 50)
+        self.hallway_source = _load_image("meeting_hallway.png")
+        self.walker_source = _load_image("volunteer_player.png")
+        self.runner_source = _load_image("meeting_runner.png")
+        self.colleague_source = _load_image("meeting_colleague.png")
+        self._scene_size: tuple[int, int] | None = None
+        self.hallway: pygame.Surface | None = None
+        self.walker_base: pygame.Surface | None = None
+        self.runner_base: pygame.Surface | None = None
+        self.colleague_base: pygame.Surface | None = None
+        self.player_sizes: dict[tuple[int, bool, bool], pygame.Surface] = {}
+        self.colleague_sizes: dict[tuple[int, bool], pygame.Surface] = {}
         self.start()
 
     @property
@@ -83,6 +108,7 @@ class RedLightGreenLight(CalibratedMinigame):
         self.still_threshold = DEFAULT_STILL_THRESHOLD
         self.animation_time = 0.0
         self.status = "Hallway clear - run!"
+        self.colleague_side = random.choice((-1, 1))
 
     def read_sample(self) -> tuple[float, float] | None:
         body = self.tracker.body if self.tracker.available else None
@@ -186,6 +212,10 @@ class RedLightGreenLight(CalibratedMinigame):
 
     def _get_caught(self) -> None:
         self.caught_this_encounter = True
+        self.record_strike()
+        if self.day_strikes >= self.strike_limit:
+            self.finish(False)
+            return
         self.chat_timer = CHAT_SECONDS
         self.exposure = 0.0
         self.running_detected = False
@@ -202,6 +232,7 @@ class RedLightGreenLight(CalibratedMinigame):
         if self.phase == "clear":
             self.phase = "approaching"
             self.encounter += 1
+            self.colleague_side = random.choice((-1, 1))
             self.phase_duration = FIRST_APPROACH_SECONDS if self.encounter == 1 else APPROACH_SECONDS
             self.caught_this_encounter = False
         elif self.phase == "approaching":
@@ -241,42 +272,15 @@ class RedLightGreenLight(CalibratedMinigame):
             self._draw_result(screen, width, height)
 
     def _draw_hallway(self, screen: pygame.Surface, width: int, height: int, horizon: int) -> None:
-        pygame.draw.rect(screen, WALL, (0, 0, width, horizon))
-        pygame.draw.polygon(screen, CARPET, [(0, height), (width, height), (int(width * 0.62), horizon), (int(width * 0.38), horizon)])
-        pygame.draw.polygon(screen, (201, 198, 188), [(0, 0), (int(width * 0.38), horizon), (0, horizon)])
-        pygame.draw.polygon(screen, (210, 207, 197), [(width, 0), (int(width * 0.62), horizon), (width, horizon)])
-        pygame.draw.line(screen, TRIM, (0, horizon), (width, horizon), 5)
-
-        for index in range(1, 7):
-            depth = index / 7
-            y = int(height + (horizon - height) * depth * depth)
-            left = int((width * 0.38) * depth)
-            right = width - left
-            pygame.draw.line(screen, (78, 89, 97), (left, y), (right, y), 2)
-
-        for side in (-1, 1):
-            for index in range(3):
-                y = int(horizon * (0.3 + index * 0.23))
-                door_w = max(35, int(width * (0.12 - index * 0.018)))
-                door_h = max(70, int(height * (0.29 - index * 0.035)))
-                if side < 0:
-                    x = int(width * (0.03 + index * 0.09))
-                else:
-                    x = width - int(width * (0.03 + index * 0.09)) - door_w
-                pygame.draw.rect(screen, DOOR, (x, y, door_w, door_h), border_radius=3)
-                knob_x = x + door_w - 9 if side < 0 else x + 9
-                pygame.draw.circle(screen, AMBER, (knob_x, y + door_h // 2), 3)
-
-        for x in (int(width * 0.28), int(width * 0.72)):
-            pygame.draw.line(screen, WHITE, (x, 16), (width // 2, horizon - 12), 5)
+        self._prepare_art(width, height)
+        screen.blit(self.hallway, (0, 0))
+        tint = pygame.Surface((width, height), pygame.SRCALPHA)
+        tint.fill((7, 34, 66, 13))
+        screen.blit(tint, (0, 0))
 
     def _draw_destination(self, screen: pygame.Surface, width: int, horizon: int) -> None:
-        door = pygame.Rect(width // 2 - 62, horizon - 155, 124, 155)
-        pygame.draw.rect(screen, NAVY, door, border_radius=5)
-        pygame.draw.rect(screen, PALE_BLUE, door.inflate(-12, -12), border_radius=3)
-        pygame.draw.line(screen, NAVY, (door.centerx, door.top + 6), (door.centerx, door.bottom - 6), 4)
         sign = self.small_font.render("MEETING ROOM", True, WHITE)
-        sign_box = sign.get_rect(center=(door.centerx, door.top - 18)).inflate(18, 8)
+        sign_box = sign.get_rect(center=(width // 2, int(self.screen.get_height() * 0.285))).inflate(18, 8)
         pygame.draw.rect(screen, NAVY, sign_box, border_radius=5)
         screen.blit(sign, sign.get_rect(center=sign_box.center))
 
@@ -285,52 +289,75 @@ class RedLightGreenLight(CalibratedMinigame):
             return
         progress = min(1.0, self.phase_time / max(self.phase_duration, 0.01))
         if self.phase == "approaching":
-            x = int(width * (0.88 - progress * 0.22))
+            u = 1.18 - progress * 0.36
         elif self.phase == "watching":
-            x = int(width * (0.66 - progress * 0.25))
+            u = 0.82 - progress * 0.64
         else:
-            x = int(width * (0.41 - progress * 0.34))
-        y = horizon + int(height * 0.08)
-        scale = max(0.75, height / 720)
-        head = int(19 * scale)
-        body_h = int(76 * scale)
-        pygame.draw.ellipse(screen, (35, 42, 47), (x - 35, y + body_h + 14, 70, 16))
-        pygame.draw.rect(screen, (116, 79, 126), (x - 25, y, 50, body_h), border_radius=14)
-        pygame.draw.circle(screen, (196, 148, 113), (x, y - head + 2), head)
-        pygame.draw.arc(screen, (52, 37, 32), (x - head, y - head * 2, head * 2, head * 2), math.pi, math.pi * 2, 7)
-        look = -5 if self.phase == "watching" else 3
-        pygame.draw.circle(screen, INK, (x - 6 + look, y - head), 2)
-        pygame.draw.circle(screen, INK, (x + 6 + look, y - head), 2)
-        pygame.draw.line(screen, (196, 148, 113), (x - 20, y + 18), (x - 35, y + 58), 8)
-        pygame.draw.line(screen, (196, 148, 113), (x + 20, y + 18), (x + 35, y + 58), 8)
+            u = 0.18 - progress * 0.36
+        if self.colleague_side < 0:
+            u = 1.0 - u
+        depth = max(0.0, min(1.0, self.course / 100.0 - 0.025))
+        x, bottom, sprite_h = self._project(u, depth, width, height)
+        flipped = self.colleague_side < 0
+        sprite = self._colleague_at_height(int(sprite_h * 1.03), flipped)
+        bob = int(math.sin(self.animation_time * 7.0) * max(1.0, 3.0 * (1.0 - depth)))
+        screen.blit(sprite, (x - sprite.get_width() // 2, bottom + bob - sprite.get_height()))
 
     def _draw_player(self, screen: pygame.Surface, width: int, height: int, horizon: int) -> None:
         progress = max(0.0, min(1.0, self.course / 100))
-        depth = progress ** 0.72
-        x = width // 2
-        y = int(height - 74 + (horizon + 30 - (height - 74)) * depth)
-        scale = 1.0 - 0.6 * depth
-        head = max(6, int(14 * scale))
-        torso = max(13, int(38 * scale))
-        limb = max(9, int(29 * scale))
-        stroke = max(3, int(7 * scale))
         sprinting = self.running_detected
-        frequency = 15 if sprinting else 5
-        amount = 0.62 if sprinting else 0.2
-        swing = int(math.sin(self.animation_time * frequency) * limb * amount)
-        lean = int(8 * scale) if sprinting else 0
-        shoulder_y = y - torso
-        color = BLUE if sprinting else NAVY
+        x, bottom, sprite_h = self._project(0.5, progress, width, height)
+        flip = sprinting and int(self.animation_time * 7.0) % 2 == 1
+        sprite = self._player_at_height(sprite_h, sprinting, flip)
+        frequency = 13.0 if sprinting else 5.0
+        strength = (5.0 if sprinting else 2.5) * (1.0 - progress) + 1.0
+        bob = int(math.sin(self.animation_time * frequency) * strength)
+        shadow_w = max(24, sprite.get_width() // 2)
+        shadow_h = max(5, int(15 * sprite_h / max(1, height * 0.36)))
+        shadow = pygame.Surface((shadow_w, shadow_h), pygame.SRCALPHA)
+        pygame.draw.ellipse(shadow, (18, 30, 40, 75), shadow.get_rect())
+        screen.blit(shadow, (x - shadow_w // 2, bottom - shadow_h // 2))
+        screen.blit(sprite, (x - sprite.get_width() // 2, bottom + bob - sprite.get_height()))
 
-        pygame.draw.circle(screen, (188, 135, 98), (x + lean, shoulder_y - head - 2), head)
-        pygame.draw.line(screen, color, (x + lean, shoulder_y), (x, y), stroke)
-        pygame.draw.line(screen, color, (x + lean, shoulder_y + 3), (x - limb // 2, shoulder_y + limb + swing), stroke)
-        pygame.draw.line(screen, color, (x + lean, shoulder_y + 3), (x + limb // 2, shoulder_y + limb - swing), stroke)
-        pygame.draw.line(screen, INK, (x, y), (x - limb // 3, y + limb - swing // 2), stroke)
-        pygame.draw.line(screen, INK, (x, y), (x + limb // 3, y + limb + swing // 2), stroke)
-        if sprinting:
-            for offset in (18, 30, 42):
-                pygame.draw.line(screen, PALE_BLUE, (x - int(offset * scale), shoulder_y + offset // 3), (x - int((offset + 12) * scale), shoulder_y + offset // 3), 3)
+    def _prepare_art(self, width: int, height: int) -> None:
+        if self._scene_size == (width, height):
+            return
+        self._scene_size = (width, height)
+        self.hallway = pygame.transform.smoothscale(self.hallway_source, (width, height))
+        self.walker_base = _scale_height(self.walker_source, int(height * 0.37))
+        self.runner_base = _scale_height(self.runner_source, int(height * 0.37))
+        self.colleague_base = _scale_height(self.colleague_source, int(height * 0.38))
+        self.player_sizes.clear()
+        self.colleague_sizes.clear()
+
+    def _project(self, u: float, progress: float, width: int, height: int) -> tuple[int, int, int]:
+        perspective = progress ** 0.78
+        floor_width = width * (0.7 + (0.08 - 0.7) * perspective)
+        x = width * 0.5 + (u - 0.5) * floor_width
+        bottom = (height - 18) + (height * 0.49 - (height - 18)) * perspective
+        sprite_h = height * (0.37 + (0.115 - 0.37) * perspective)
+        return int(x), int(bottom), max(54, int(sprite_h))
+
+    def _player_at_height(self, height: int, running: bool, flipped: bool) -> pygame.Surface:
+        height = max(4, round(height / 4) * 4)
+        key = (height, running, flipped)
+        if key not in self.player_sizes:
+            source = self.runner_base if running else self.walker_base
+            sprite = _scale_height(source, height)
+            if flipped:
+                sprite = pygame.transform.flip(sprite, True, False)
+            self.player_sizes[key] = sprite
+        return self.player_sizes[key]
+
+    def _colleague_at_height(self, height: int, flipped: bool) -> pygame.Surface:
+        height = max(4, round(height / 4) * 4)
+        key = (height, flipped)
+        if key not in self.colleague_sizes:
+            sprite = _scale_height(self.colleague_base, height)
+            if flipped:
+                sprite = pygame.transform.flip(sprite, True, False)
+            self.colleague_sizes[key] = sprite
+        return self.colleague_sizes[key]
 
     def _draw_hud(self, screen: pygame.Surface, width: int, height: int) -> None:
         remaining = max(0, math.ceil(MEETING_SECONDS - self.elapsed))
@@ -357,6 +384,14 @@ class RedLightGreenLight(CalibratedMinigame):
 
         if self.phase == "watching" and not self.caught_this_encounter:
             draw_bar(screen, (width // 2 - 120, status_box.bottom + 8, 240, 9), self.exposure / CAUGHT_AFTER, RED, back=BAR_BACK, radius=4)
+
+        strike_label = self.small_font.render("STRIKES", True, WHITE)
+        strike_x = width - 142
+        strike_y = height - 58
+        screen.blit(strike_label, (strike_x, strike_y))
+        for index in range(self.strike_limit):
+            color = RED if index < self.day_strikes else (118, 132, 143)
+            pygame.draw.circle(screen, color, (strike_x + 76 + index * 18, strike_y + 10), 6)
 
         if self.mode == "calibrate":
             overlay = pygame.Surface((width, height), pygame.SRCALPHA)

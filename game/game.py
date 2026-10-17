@@ -5,7 +5,7 @@ from game.minigame import Minigame
 from game.scenes import SCENES
 from game.settings import Settings
 from game.ui import ScreenManager
-from game.ui.screens import FailScreen, Menu, MenuItem, MinigameIntro, PassScreen, SceneScreen
+from game.ui.screens import FailScreen, FiredScreen, Menu, MenuItem, MinigameIntro, PassScreen, SceneScreen
 
 
 class Game:
@@ -27,6 +27,7 @@ class Game:
         ]
         self.remaining: list[type[Minigame]] = []
         self.minigame: Minigame | None = None
+        self.strikes = 0
         self.ui = ScreenManager()
         self.menu = Menu(
             self.settings.title,
@@ -37,6 +38,7 @@ class Game:
         )
 
     def start_game(self) -> None:
+        self.strikes = 0
         self.remaining = self.minigames.copy()
         self.next_minigame()
 
@@ -48,6 +50,7 @@ class Game:
             return
         cls = self.remaining.pop(0)
         self.minigame = cls(self.screen)
+        self.minigame.day_strikes = self.strikes
         scene = SCENES.get(cls)
         if scene is None:
             self.show_intro()
@@ -102,8 +105,15 @@ class Game:
             self.minigame.update(dt)
             if self.minigame.finished:
                 self.minigame.close()
-                result = PassScreen if self.minigame.won else FailScreen
-                screen = result(lambda: self.ui.dismiss(self.next_minigame))
+                self.strikes = self.minigame.day_strikes
+                if self.strikes >= 3:
+                    self.remaining.clear()
+                    screen = FiredScreen(lambda: self.ui.dismiss(self.next_minigame))
+                else:
+                    result = PassScreen if self.minigame.won else FailScreen
+                    screen = result(lambda: self.ui.dismiss(self.next_minigame))
+                    if not self.minigame.won:
+                        screen.DESCRIPTION = f"Strike {self.strikes} of 3."
                 self.ui.show(screen, backdrop=self.minigame.draw)
 
     def draw(self) -> None:

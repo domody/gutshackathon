@@ -28,6 +28,9 @@ class Minigame(ABC):
         self.screen = screen
         self.finished = False
         self.won = False
+        self.day_strikes = 0
+        self.strike_limit = 3
+        self.strike_earned = False
 
         pygame.font.init()
         self.font = pygame.font.Font(None, 36)
@@ -51,6 +54,7 @@ class Minigame(ABC):
         """Reset state when the minigame begins. Subclasses call super().start()."""
         self.finished = False
         self.won = False
+        self.strike_earned = False
 
     def update(self, dt: float) -> None:
         pass
@@ -64,5 +68,16 @@ class Minigame(ABC):
             self.tracker.stop()
 
     def finish(self, won: bool) -> None:
+        if self.finished:
+            return
+        if not won:
+            self.record_strike()
         self.finished = True
         self.won = won
+
+    def record_strike(self) -> bool:
+        if self.strike_earned:
+            return False
+        self.strike_earned = True
+        self.day_strikes = min(self.strike_limit, self.day_strikes + 1)
+        return True
