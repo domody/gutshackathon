@@ -94,6 +94,7 @@ class OneLastPrint(CalibratedMinigame):
         self.pull_size = 0.0
         self.pull_distance = 0.0
         self.pull_flash = 0.0
+        self.printer_shake = 0.0
         self.idle_time = 0.0
         self.total_pulls = 0
         self.message_index = 0
@@ -119,6 +120,7 @@ class OneLastPrint(CalibratedMinigame):
             return
         dt = min(dt, 0.1)
         self.pull_flash = max(0.0, self.pull_flash - dt)
+        self.printer_shake = max(0.0, self.printer_shake - dt)
 
         if self.result is not None:
             self.result_time += dt
@@ -223,6 +225,7 @@ class OneLastPrint(CalibratedMinigame):
         self.pull_side = None
         self.armed_sides.clear()
         self.pull_flash = 0.34
+        self.printer_shake = 0.28
         self.idle_time = 0.0
         self.total_pulls += 1
         self.register_combo_success()
@@ -257,7 +260,7 @@ class OneLastPrint(CalibratedMinigame):
         screen.blit(self.room_art, (0, 0))
 
         if self.result is True:
-            screen.blit(self.state_art[4], (0, 0))
+            printer_art = self.state_art[4]
         else:
             progress = max(0.0, min(0.999, self.extraction / 100.0))
             if progress < 0.24:
@@ -268,11 +271,19 @@ class OneLastPrint(CalibratedMinigame):
                 state = 2
             else:
                 state = 3
-            screen.blit(self.state_art[state], (0, 0))
+            printer_art = self.state_art[state]
+
+        shake_x = 0
+        shake_y = 0
+        if self.printer_shake > 0 and self.result is None:
+            strength = self.printer_shake / 0.28
+            shake_x = round(math.sin(self.printer_shake * 155.0) * 6.0 * strength)
+            shake_y = round(math.cos(self.printer_shake * 190.0) * 3.0 * strength)
+        screen.blit(printer_art, (shake_x, shake_y))
 
         if self.pull_flash > 0 and self.result is None:
             flash = pygame.Surface((width, height), pygame.SRCALPHA)
-            flash.fill((255, 244, 201, round(24 * min(1.0, self.pull_flash / 0.34))))
+            flash.fill((74, 205, 126, round(34 * min(1.0, self.pull_flash / 0.34))))
             screen.blit(flash, (0, 0))
 
         clock = pygame.Rect(0, 0, 116, 48)
