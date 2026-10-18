@@ -57,8 +57,9 @@ class HandTracker(CameraTracker):
     stale_seconds = 0.4
     smoothing = 0.4
 
-    def __init__(self, camera_index: int = 0) -> None:
+    def __init__(self, camera_index: int = 0, full_hand: bool = False) -> None:
         super().__init__(camera_index)
+        self.full_hand = full_hand  # Draw all 21 landmarks instead of thumb and index tips.
         self._landmarker = None
         self._pos: tuple[float, float] | None = None
         self._pinch = False
@@ -114,7 +115,8 @@ class HandTracker(CameraTracker):
             self._pos = (x, y)
             self._time = now
             self._pinch = ratio < (PINCH_OFF if self._pinch else PINCH_ON)
-        return [(pts[i].x, pts[i].y) for i in (THUMB_TIP, INDEX_TIP)]
+        ids = range(len(pts)) if self.full_hand else (THUMB_TIP, INDEX_TIP)
+        return [(pts[i].x, pts[i].y) for i in ids]
 
     def _vote(self, label: str | None) -> None:
         self._votes.append(label)

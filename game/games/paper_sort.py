@@ -50,6 +50,8 @@ class PaperSort(Minigame):
 
     def __init__(self, screen: pygame.Surface, tracker: HandTracker | None = None) -> None:
         super().__init__(screen, tracker)
+        self.tracker.full_hand = True
+
         self.title_font = get_font(58)
         self.file_font = get_font(42)
         self.label_font = get_font(29)

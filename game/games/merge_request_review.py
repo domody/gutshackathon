@@ -37,6 +37,8 @@ class MergeRequestReview(Minigame):
 
     def __init__(self, screen: pygame.Surface, tracker: HandTracker | None = None) -> None:
         super().__init__(screen, tracker)
+        self.tracker.full_hand = True
+
         self.label_font = get_font(30)
         self.background_source = load_image("merge_review_background.png", alpha=False)
         self.request_sources = {
