@@ -11,6 +11,7 @@ from game.minigame import Action
 from game.tracking import FaceTracker
 from game.ui import draw_bar, draw_camera_preview, draw_status_line, draw_text_centered
 
+# Gameplay
 WALK_SECONDS = 24.0
 TILT_RANGE = 20.0
 DEAD_ZONE = 0.12
@@ -20,6 +21,7 @@ WARN_SECONDS = 1.15
 APPROACH_SECONDS = 2.8
 VOLUNTEERED_SECONDS = 2.4
 
+# Colors
 NAVY = (7, 34, 66)
 BLUE = (17, 92, 170)
 PALE_BLUE = (102, 190, 234)

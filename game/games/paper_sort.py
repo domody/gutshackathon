@@ -10,14 +10,18 @@ from game.minigame import Action, Minigame
 from game.tracking import HandTracker
 from game.ui import draw_bar, draw_camera_preview, draw_status_line, draw_text_centered
 
+# Gameplay
 TOTAL_FILES = 10
 MAX_MISTAKES = 3
 ROUND_SECONDS = 28.0
 RESULT_SECONDS = 1.8
+
+# Swipe
 SWIPE_LIMIT = 0.27
 RESET_LEFT = 0.36
 RESET_RIGHT = 0.64
 
+# Colors
 NAVY = (8, 37, 67)
 BLUE = (30, 103, 164)
 PALE = (211, 230, 241)

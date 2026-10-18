@@ -10,17 +10,23 @@ from game.minigame import Action, Minigame
 from game.tracking import HandTracker
 from game.ui import draw_bar, draw_camera_preview, draw_status_line, draw_text_centered
 
+# Tracing
 TOLERANCE = 0.036
 MAX_OFF_LINE = 0.1
 WIN_COVERAGE = 0.98
 SAMPLE_SPACING = 6
+
+# Pointer
 POINTER_DEAD_ZONE = 1.8
 POINTER_MAX_STEP = 95.0
+
+# Timing
 SLIDE_SECONDS = 0.72
 PAGE_PAUSE = 1.1
 RETRY_PAUSE = 1.2
 END_DELAY = 2.2
 
+# Colors
 DESK = (75, 55, 43)
 DESK_GRAIN = (98, 72, 55)
 PAPER = (247, 244, 232)

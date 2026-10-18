@@ -11,12 +11,14 @@ from game.minigame import Action, Minigame
 from game.tracking import HandTracker
 from game.ui import draw_camera_preview, draw_status_line, draw_text_centered
 
+# Gameplay
 TARGET_REQUESTS = 10
 LIVES = 3
 READY_SECONDS = 2.8
 GESTURE_HOLD = 0.18
 RESULT_SECONDS = 0.72
 
+# Colors
 GOOD = (62, 176, 92)
 BAD = (232, 72, 65)
 NAVY = (19, 39, 67)

@@ -14,15 +14,19 @@ from game.tracking import PullTracker
 from game.tracking.pull import HandReading, PullReading
 from game.ui import draw_bar, draw_camera_preview, draw_status_line, draw_text_centered
 
+# Pulling
 REACH_MINIMUM = 0.24
 PULL_SIZE_RATIO = 0.79
 PULL_CHEST_GAIN = 0.22
 PULL_PROGRESS = 8.0
 PRINTER_RESISTANCE = 0.52
 RESISTANCE_DELAY = 0.85
+
+# Timing
 ROUND_SECONDS = 38.0
 RESULT_SECONDS = 3.4
 
+# Colors
 WALL = (218, 218, 208)
 DESK = (112, 80, 58)
 DESK_EDGE = (71, 49, 38)

@@ -12,6 +12,7 @@ from game.minigame import Action
 from game.tracking import FaceTracker
 from game.ui import draw_bar, draw_camera_preview, draw_status_line, draw_text_centered
 
+# Gameplay
 TARGET_TURNS = 9
 READY_SECONDS = 1.4
 HOLD_SECONDS = 1.35
@@ -19,6 +20,7 @@ SPEAK_SECONDS = 2.8
 TURN_SECONDS = 5.2
 SIDE_THRESHOLD = 0.48
 
+# Colors
 NAVY = (7, 34, 66)
 CHASE_BLUE = (17, 92, 170)
 CHASE_LIGHT = (77, 157, 224)
@@ -32,6 +34,7 @@ GREEN = (69, 173, 113)
 AMBER = (244, 177, 72)
 RED = (210, 78, 66)
 
+# Dialogue
 SPEECH = {
     "left": ("Quick update from my side.", "Can everyone see my screen?",
              "I'll circle back on that after lunch.", "I have one small blocker to raise.",

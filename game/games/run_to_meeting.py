@@ -13,6 +13,7 @@ from game.minigame import Action
 from game.tracking import BodyTracker
 from game.ui import draw_bar, draw_camera_preview, draw_status_line, draw_text_centered
 
+# Timing
 MEETING_SECONDS = 30.0
 INTRO_SECONDS = 4.2
 FIRST_CLEAR_SECONDS = 6.5
@@ -24,14 +25,19 @@ WATCH_MIN = 2.5
 WATCH_MAX = 3.5
 DEPART_SECONDS = 1.15
 STOP_GRACE = 0.95
+
+# Movement
 SPRINT_SPEED = 7.5
 WALK_SPEED = 1.3
 PUMP_THRESHOLD = 0.9
 DEFAULT_STILL_THRESHOLD = 0.42
+
+# Outcome
 CAUGHT_AFTER = 0.2
 CHAT_SECONDS = 2.5
 RESULT_SECONDS = 2.8
 
+# Colors
 NAVY = (13, 35, 57)
 BLUE = (40, 123, 181)
 PALE_BLUE = (154, 207, 232)

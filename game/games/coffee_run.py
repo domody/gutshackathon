@@ -12,8 +12,11 @@ from game.minigame import Action
 from game.tracking import FaceTracker
 from game.ui import draw_bar, draw_camera_preview, draw_status_line, draw_text_centered
 
+# Timing
 DURATION = 16.0
 READY_SECONDS = 1.5
+
+# Physics
 CONTROL_ACCELERATION = 4.8
 OUTWARD_GRAVITY = 1.35
 DRAG = 0.72
@@ -24,6 +27,7 @@ SPILL_SPEED_UP = 0.34
 JOLT_EVERY = (2.7, 4.2)
 JOLT_SIZE = (0.18, 0.32)
 
+# Colors
 NAVY = (8, 35, 64)
 WHITE = (248, 248, 243)
 PALE = (196, 220, 234)
