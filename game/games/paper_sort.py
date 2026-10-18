@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import os
 import random
 
-import numpy as np
 import pygame
 
+from game.assets import get_font, key_pink, load_image
 from game.minigame import Action, Minigame
 from game.tracking import HandTracker
 from game.ui import draw_bar, draw_camera_preview, draw_status_line, draw_text_centered
@@ -28,20 +27,11 @@ WOOD_LIGHT = (193, 139, 87)
 GREEN = (57, 164, 102)
 RED = (207, 66, 62)
 WHITE = (250, 250, 247)
-ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 
 def _load_documents() -> dict[str, pygame.Surface]:
-    image = pygame.image.load(os.path.join(ASSET_DIR, "paper_sort_documents.png")).convert_alpha()
-    rgb = pygame.surfarray.array3d(image)
-    alpha = pygame.surfarray.pixels_alpha(image)
-    red = rgb[:, :, 0].astype(np.int16)
-    green = rgb[:, :, 1].astype(np.int16)
-    blue = rgb[:, :, 2].astype(np.int16)
-    pink = ((red > 80) & (blue > 80) & (green < np.minimum(red, blue) * 0.70)
-            & (np.abs(red - blue) < 100))
-    alpha[pink] = 0
-    del alpha
+    image = load_image("paper_sort_documents.png")
+    key_pink(image)
     half = image.get_width() // 2
     expense_half = image.subsurface((0, 0, half, image.get_height())).copy()
     contract_half = image.subsurface((half, 0, image.get_width() - half, image.get_height())).copy()
@@ -59,10 +49,10 @@ class PaperSort(Minigame):
 
     def __init__(self, screen: pygame.Surface, tracker: HandTracker | None = None) -> None:
         super().__init__(screen, tracker)
-        self.title_font = pygame.font.Font(None, 58)
-        self.file_font = pygame.font.Font(None, 42)
-        self.label_font = pygame.font.Font(None, 29)
-        self.desk_source = pygame.image.load(os.path.join(ASSET_DIR, "paper_sort_desk.png")).convert()
+        self.title_font = get_font(58)
+        self.file_font = get_font(42)
+        self.label_font = get_font(29)
+        self.desk_source = load_image("paper_sort_desk.png", alpha=False)
         self.document_sources = _load_documents()
         self._art_size: tuple[int, int] | None = None
         self.desk_art: pygame.Surface | None = None

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import math
-import os
 
 import pygame
 
+from game.assets import get_font, load_image
 from game.minigame import Action, Minigame
 from game.tracking import HandTracker
 from game.ui import draw_bar, draw_camera_preview, draw_status_line, draw_text_centered
@@ -31,7 +31,6 @@ BAD = (205, 62, 62)
 GREEN = (67, 161, 103)
 AMBER = (226, 157, 47)
 WHITE = (250, 250, 247)
-ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 
 class ContractSigningDay(Minigame):
@@ -40,16 +39,13 @@ class ContractSigningDay(Minigame):
 
     def __init__(self, screen: pygame.Surface, tracker: HandTracker | None = None) -> None:
         super().__init__(screen, tracker)
-        self.heading_font = pygame.font.Font(None, 58)
-        self.document_font = pygame.font.Font(None, 32)
-        self.name_font = pygame.font.Font(None, 40)
-        self.body_font = pygame.font.Font(None, 25)
-        self.meter_font = pygame.font.Font(None, 18)
-        self.desk_source = pygame.image.load(os.path.join(ASSET_DIR, "contract_desk.png"))
-        self.pen_source = pygame.image.load(os.path.join(ASSET_DIR, "contract_pen.png"))
-        if pygame.display.get_surface():
-            self.desk_source = self.desk_source.convert()
-            self.pen_source = self.pen_source.convert_alpha()
+        self.heading_font = get_font(58)
+        self.document_font = get_font(32)
+        self.name_font = get_font(40)
+        self.body_font = get_font(25)
+        self.meter_font = get_font(18)
+        self.desk_source = load_image("contract_desk.png", alpha=False)
+        self.pen_source = load_image("contract_pen.png")
         self.desk_surface: pygame.Surface | None = None
         self.desk_size: tuple[int, int] | None = None
         self.desk_crop = (0, 0)

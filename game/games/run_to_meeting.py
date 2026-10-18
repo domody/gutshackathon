@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import math
-import os
 import random
 from statistics import median
 
 import pygame
 
+from game.assets import get_font, load_image, scale_to_height
 from game.calibrated_minigame import CalibratedMinigame
 from game.minigame import Action
 from game.tracking import BodyTracker
@@ -44,19 +44,6 @@ AMBER = (245, 178, 55)
 RED = (219, 69, 72)
 GREEN = (72, 177, 113)
 BAR_BACK = (58, 70, 80)
-ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
-
-
-def _load_image(filename: str) -> pygame.Surface:
-    image = pygame.image.load(os.path.join(ASSET_DIR, filename))
-    if pygame.display.get_surface():
-        image = image.convert_alpha()
-    return image
-
-
-def _scale_height(image: pygame.Surface, height: int) -> pygame.Surface:
-    width = max(1, round(image.get_width() * height / image.get_height()))
-    return pygame.transform.smoothscale(image, (width, height))
 
 
 class RunToMeeting(CalibratedMinigame):
@@ -66,13 +53,13 @@ class RunToMeeting(CalibratedMinigame):
 
     def __init__(self, screen: pygame.Surface, tracker: BodyTracker | None = None) -> None:
         super().__init__(screen, tracker)
-        self.heading_font = pygame.font.Font(None, 62)
-        self.countdown_font = pygame.font.Font(None, 42)
-        self.cue_font = pygame.font.Font(None, 50)
-        self.hallway_source = _load_image("meeting_hallway.png")
-        self.walker_source = _load_image("volunteer_player.png")
-        self.runner_source = _load_image("meeting_runner.png")
-        self.colleague_source = _load_image("meeting_colleague.png")
+        self.heading_font = get_font(62)
+        self.countdown_font = get_font(42)
+        self.cue_font = get_font(50)
+        self.hallway_source = load_image("meeting_hallway.png")
+        self.walker_source = load_image("volunteer_player.png")
+        self.runner_source = load_image("meeting_runner.png")
+        self.colleague_source = load_image("meeting_colleague.png")
         self._scene_size: tuple[int, int] | None = None
         self.hallway: pygame.Surface | None = None
         self.walker_base: pygame.Surface | None = None
@@ -330,9 +317,9 @@ class RunToMeeting(CalibratedMinigame):
             return
         self._scene_size = (width, height)
         self.hallway = pygame.transform.smoothscale(self.hallway_source, (width, height))
-        self.walker_base = _scale_height(self.walker_source, int(height * 0.37))
-        self.runner_base = _scale_height(self.runner_source, int(height * 0.37))
-        self.colleague_base = _scale_height(self.colleague_source, int(height * 0.38))
+        self.walker_base = scale_to_height(self.walker_source, int(height * 0.37))
+        self.runner_base = scale_to_height(self.runner_source, int(height * 0.37))
+        self.colleague_base = scale_to_height(self.colleague_source, int(height * 0.38))
         self.player_sizes.clear()
         self.colleague_sizes.clear()
 
@@ -349,7 +336,7 @@ class RunToMeeting(CalibratedMinigame):
         key = (height, running, flipped)
         if key not in self.player_sizes:
             source = self.runner_base if running else self.walker_base
-            sprite = _scale_height(source, height)
+            sprite = scale_to_height(source, height)
             if flipped:
                 sprite = pygame.transform.flip(sprite, True, False)
             self.player_sizes[key] = sprite
@@ -359,7 +346,7 @@ class RunToMeeting(CalibratedMinigame):
         height = max(4, round(height / 4) * 4)
         key = (height, flipped)
         if key not in self.colleague_sizes:
-            sprite = _scale_height(self.colleague_base, height)
+            sprite = scale_to_height(self.colleague_base, height)
             if flipped:
                 sprite = pygame.transform.flip(sprite, True, False)
             self.colleague_sizes[key] = sprite

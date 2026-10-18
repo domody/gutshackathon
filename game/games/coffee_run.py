@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import math
-import os
 import random
 
 import numpy as np
 import pygame
 
+from game.assets import crop_to_alpha, key_pink, load_image
 from game.face_minigame import FaceMinigame
 from game.minigame import Action
 from game.tracking import FaceTracker
@@ -32,20 +32,13 @@ COFFEE_TOP = (130, 75, 39)
 GOOD = (62, 175, 108)
 WARN = (240, 173, 50)
 BAD = (214, 65, 62)
-ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 
 def _load_chroma(filename: str, remove_coffee: bool = False) -> tuple[pygame.Surface, pygame.Rect]:
-    image = pygame.image.load(os.path.join(ASSET_DIR, filename)).convert_alpha()
-    rgb = pygame.surfarray.array3d(image)
-    alpha = pygame.surfarray.pixels_alpha(image)
-    red = rgb[:, :, 0].astype(np.int16)
-    green = rgb[:, :, 1].astype(np.int16)
-    blue = rgb[:, :, 2].astype(np.int16)
-    pink = ((red > 80) & (blue > 80) & (green < np.minimum(red, blue) * 0.70)
-            & (np.abs(red - blue) < 100))
-    alpha[pink] = 0
+    image = load_image(filename)
+    rgb = key_pink(image)
     if remove_coffee:
+        alpha = pygame.surfarray.pixels_alpha(image)
         xs = np.arange(image.get_width())[:, None]
         ys = np.arange(image.get_height())[None, :]
         coffee_area = (xs > 385) & (xs < 575) & (ys > 150) & (ys < 225)
@@ -53,9 +46,8 @@ def _load_chroma(filename: str, remove_coffee: bool = False) -> tuple[pygame.Sur
                  & (rgb[:, :, 1] > 14) & (rgb[:, :, 1] < 125)
                  & (rgb[:, :, 2] < 100))
         alpha[coffee_area & brown] = 0
-    del alpha
-    bounds = image.get_bounding_rect(min_alpha=8)
-    return image.subsurface(bounds).copy(), bounds
+        del alpha
+    return crop_to_alpha(image)
 
 
 class CoffeeRun(FaceMinigame):
@@ -64,7 +56,7 @@ class CoffeeRun(FaceMinigame):
 
     def __init__(self, screen: pygame.Surface, tracker: FaceTracker | None = None) -> None:
         super().__init__(screen, tracker)
-        self.hallway_source = pygame.image.load(os.path.join(ASSET_DIR, "coffee_hallway.png")).convert()
+        self.hallway_source = load_image("coffee_hallway.png", alpha=False)
         self.hand_source, self.hand_bounds = _load_chroma("coffee_hand.png", True)
         self.bar_source, _ = _load_chroma("coffee_balance_bar.png")
         self.marker_source, _ = _load_chroma("coffee_balance_marker.png")

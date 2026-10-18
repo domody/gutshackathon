@@ -1,8 +1,8 @@
 from collections.abc import Sequence
-from pathlib import Path
 
 import pygame
 
+from game.assets import MENU_DIR, cover, get_font, load_image
 from game.ui.screen import Screen
 from game.ui.screens.item import MenuItem
 
@@ -23,12 +23,11 @@ class Menu(Screen):
         self.title = title
         self.items = list(items)
         self.selected = 0
-        self._title_font = pygame.font.Font(None, self.TITLE_SIZE)
-        self._item_font = pygame.font.Font(None, self.ITEM_SIZE)
-        self._subtitle_font = pygame.font.Font(None, 26)
+        self._title_font = get_font(self.TITLE_SIZE)
+        self._item_font = get_font(self.ITEM_SIZE)
+        self._subtitle_font = get_font(26)
         self._item_rects: list[pygame.Rect] = []
-        path = Path(__file__).resolve().parents[3] / "assets" / "menu" / "jpmorgan_building.png"
-        self._background = pygame.image.load(path).convert()
+        self._background = load_image("jpmorgan_building.png", alpha=False, base=MENU_DIR)
         self._scaled: pygame.Surface | None = None
 
     def handle_event(self, event: pygame.event.Event) -> None:
@@ -75,13 +74,7 @@ class Menu(Screen):
 
     def _cover(self, size: tuple[int, int]) -> pygame.Surface:
         if self._scaled is None or self._scaled.get_size() != size:
-            iw, ih = self._background.get_size()
-            scale = max(size[0] / iw, size[1] / ih)
-            big = pygame.transform.smoothscale(
-                self._background, (max(size[0], round(iw * scale)), max(size[1], round(ih * scale))))
-            crop = pygame.Rect(0, 0, *size)
-            crop.center = big.get_rect().center
-            self._scaled = big.subsurface(crop).copy()
+            self._scaled = cover(self._background, size)
         return self._scaled
 
     def _activate(self) -> None:

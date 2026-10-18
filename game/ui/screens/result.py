@@ -2,6 +2,7 @@ from typing import Callable
 
 import pygame
 
+from game.assets import get_font
 from game.ui.screen import BLANK, Screen
 from game.ui.typewriter import Typewriter
 
@@ -30,10 +31,10 @@ class ResultScreen(Screen):
         self.round_score = round_score
         self._score_elapsed = 0.0
         self._writer = Typewriter()
-        self._title_font = pygame.font.Font(None, self.TITLE_SIZE)
-        self._desc_font = pygame.font.Font(None, self.DESC_SIZE)
-        self._hint_font = pygame.font.Font(None, self.HINT_SIZE)
-        self._score_font = pygame.font.Font(None, 42)
+        self._title_font = get_font(self.TITLE_SIZE)
+        self._desc_font = get_font(self.DESC_SIZE)
+        self._hint_font = get_font(self.HINT_SIZE)
+        self._score_font = get_font(42)
 
     @property
     def display_score(self) -> int | None:

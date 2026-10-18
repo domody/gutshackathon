@@ -3,6 +3,7 @@ from collections.abc import Callable, Sequence
 
 import pygame
 
+from game.assets import get_font
 from game.ui.screen import BLANK, Screen
 
 
@@ -20,12 +21,12 @@ class FinalScoreScreen(Screen):
         self.total_score = total_score
         self.strikes = strikes
         self.elapsed = 0.0
-        self.title_font = pygame.font.Font(None, 76)
-        self.score_font = pygame.font.Font(None, 68)
-        self.summary_font = pygame.font.Font(None, 34)
-        self.quip_font = pygame.font.Font(None, 29)
-        self.row_font = pygame.font.Font(None, 25)
-        self.hint_font = pygame.font.Font(None, 27)
+        self.title_font = get_font(76)
+        self.score_font = get_font(68)
+        self.summary_font = get_font(34)
+        self.quip_font = get_font(29)
+        self.row_font = get_font(25)
+        self.hint_font = get_font(27)
 
     @property
     def maximum_score(self) -> int:

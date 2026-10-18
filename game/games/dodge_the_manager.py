@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import math
-import os
 import random
 
 import pygame
 
+from game.assets import load_image, scale_to_height
 from game.face_minigame import FaceMinigame
 from game.minigame import Action
 from game.tracking import FaceTracker
@@ -19,7 +19,6 @@ EDGE_MARGIN = 0.16
 WARN_SECONDS = 1.15
 APPROACH_SECONDS = 2.8
 VOLUNTEERED_SECONDS = 2.4
-ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 NAVY = (7, 34, 66)
 BLUE = (17, 92, 170)
@@ -31,26 +30,14 @@ RED = (212, 69, 61)
 SHADOW = (18, 30, 40, 75)
 
 
-def _load_image(filename: str) -> pygame.Surface:
-    image = pygame.image.load(os.path.join(ASSET_DIR, filename))
-    if pygame.display.get_surface():
-        image = image.convert_alpha()
-    return image
-
-
-def _scale_height(image: pygame.Surface, height: int) -> pygame.Surface:
-    width = max(1, round(image.get_width() * height / image.get_height()))
-    return pygame.transform.smoothscale(image, (width, height))
-
-
 class DodgeTheManager(FaceMinigame):
     title = "Any Volunteers?"
 
     def __init__(self, screen: pygame.Surface, tracker: FaceTracker | None = None) -> None:
         super().__init__(screen, tracker)
-        self.hallway_source = _load_image("volunteer_hallway.png")
-        self.player_source = _load_image("volunteer_player.png")
-        self.manager_source = _load_image("volunteer_manager.png")
+        self.hallway_source = load_image("volunteer_hallway.png")
+        self.player_source = load_image("volunteer_player.png")
+        self.manager_source = load_image("volunteer_manager.png")
         self._scene_size: tuple[int, int] | None = None
         self.hallway: pygame.Surface | None = None
         self.player_sprite: pygame.Surface | None = None
@@ -191,8 +178,8 @@ class DodgeTheManager(FaceMinigame):
         self.hallway = pygame.transform.smoothscale(self.hallway_source, (w, h))
         player_h = max(150, int(h * 0.36))
         manager_h = max(165, int(h * 0.38))
-        self.player_sprite = _scale_height(self.player_source, player_h)
-        self.manager_sprite = _scale_height(self.manager_source, manager_h)
+        self.player_sprite = scale_to_height(self.player_source, player_h)
+        self.manager_sprite = scale_to_height(self.manager_source, manager_h)
         self.manager_flipped = pygame.transform.flip(self.manager_sprite, True, False)
         self.player_sizes.clear()
         self.manager_sizes.clear()
@@ -208,7 +195,7 @@ class DodgeTheManager(FaceMinigame):
     def _player_at_height(self, height: int) -> pygame.Surface:
         height = max(4, round(height / 4) * 4)
         if height not in self.player_sizes:
-            self.player_sizes[height] = _scale_height(self.player_sprite, height)
+            self.player_sizes[height] = scale_to_height(self.player_sprite, height)
         return self.player_sizes[height]
 
     def _manager_at_height(self, height: int) -> pygame.Surface:
@@ -217,7 +204,7 @@ class DodgeTheManager(FaceMinigame):
         key = (height, flipped)
         if key not in self.manager_sizes:
             source = self.manager_flipped if flipped else self.manager_sprite
-            self.manager_sizes[key] = _scale_height(source, height)
+            self.manager_sizes[key] = scale_to_height(source, height)
         return self.manager_sizes[key]
 
     def draw(self, screen: pygame.Surface) -> None:

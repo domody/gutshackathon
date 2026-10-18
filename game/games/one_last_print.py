@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import math
-import os
 import random
 from statistics import median
 
 import pygame
 
+from game.assets import get_font, load_image
 from game.calibrated_minigame import CalibratedMinigame
 from game.minigame import Action
 from game.tracking import PullTracker
@@ -47,14 +47,13 @@ class OneLastPrint(CalibratedMinigame):
 
     def __init__(self, screen: pygame.Surface, tracker: PullTracker | None = None) -> None:
         super().__init__(screen, tracker)
-        self.title_font = pygame.font.Font(None, 64)
-        self.clock_font = pygame.font.Font(None, 46)
-        self.printer_font = pygame.font.Font(None, 25)
-        self.result_font = pygame.font.Font(None, 58)
-        asset_dir = os.path.join(os.path.dirname(__file__), "assets")
-        self.room_source = pygame.image.load(os.path.join(asset_dir, "printer_room.png")).convert()
-        self.printer_source = pygame.image.load(os.path.join(asset_dir, "printer_machine.png")).convert_alpha()
-        self.paper_source = pygame.image.load(os.path.join(asset_dir, "printer_paper.png")).convert_alpha()
+        self.title_font = get_font(64)
+        self.clock_font = get_font(46)
+        self.printer_font = get_font(25)
+        self.result_font = get_font(58)
+        self.room_source = load_image("printer_room.png", alpha=False)
+        self.printer_source = load_image("printer_machine.png")
+        self.paper_source = load_image("printer_paper.png")
         self.art_size: tuple[int, int] | None = None
         self.room_art: pygame.Surface | None = None
         self.printer_art: pygame.Surface | None = None

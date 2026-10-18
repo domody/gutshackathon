@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 
 import pygame
 
+from game.assets import get_font
+
 if TYPE_CHECKING:
     from game.tracking import CameraTracker
 
@@ -36,9 +38,9 @@ class Minigame(ABC):
         self.strike_earned = False
 
         pygame.font.init()
-        self.font = pygame.font.Font(None, 36)
-        self.small_font = pygame.font.Font(None, 24)
-        self.big_font = pygame.font.Font(None, 72)
+        self.font = get_font(36)
+        self.small_font = get_font(24)
+        self.big_font = get_font(72)
 
         # A shared tracker can be passed in when minigames use the same camera.
         self.tracker = tracker

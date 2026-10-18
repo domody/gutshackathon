@@ -2,6 +2,7 @@ from typing import Callable
 
 import pygame
 
+from game.assets import get_font
 from game.minigame import Action, Minigame
 from game.ui.screen import Screen
 from game.ui.typewriter import Typewriter
@@ -31,11 +32,11 @@ class MinigameIntro(Screen):
     def __init__(self, minigame: Minigame, on_okay: Callable[[], None]) -> None:
         self.minigame = minigame
         self.on_okay = on_okay
-        self._title_font = pygame.font.Font(None, self.TITLE_SIZE)
-        self._subtitle_font = pygame.font.Font(None, self.SUBTITLE_SIZE)
-        self._name_font = pygame.font.Font(None, self.NAME_SIZE)
-        self._desc_font = pygame.font.Font(None, self.DESC_SIZE)
-        self._button_font = pygame.font.Font(None, self.BUTTON_SIZE)
+        self._title_font = get_font(self.TITLE_SIZE)
+        self._subtitle_font = get_font(self.SUBTITLE_SIZE)
+        self._name_font = get_font(self.NAME_SIZE)
+        self._desc_font = get_font(self.DESC_SIZE)
+        self._button_font = get_font(self.BUTTON_SIZE)
         self._button_rect = pygame.Rect(0, 0, 0, 0)
         self._writer = Typewriter(60)
         self._dim: pygame.Surface | None = None

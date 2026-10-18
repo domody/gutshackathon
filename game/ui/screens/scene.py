@@ -1,12 +1,10 @@
-from pathlib import Path
 from typing import Callable
 
 import pygame
 
+from game.assets import SCENES_DIR, cover, get_font, load_image
 from game.ui.screen import BLANK, Screen
 from game.ui.typewriter import Typewriter
-
-SCENES_DIR = Path(__file__).resolve().parents[3] / "assets" / "scenes"
 
 
 class SceneScreen(Screen):
@@ -33,12 +31,12 @@ class SceneScreen(Screen):
         self.on_continue = on_continue
         path = next((candidate for candidate in (SCENES_DIR / f"{image}.png", SCENES_DIR / f"{image}.jpg")
                      if candidate.exists()), SCENES_DIR / f"{image}.png")
-        self._image = pygame.image.load(path).convert()
+        self._image = load_image(path, alpha=False)
         self._scaled: pygame.Surface | None = None
-        self._name_font = pygame.font.Font(None, self.NAME_SIZE)
+        self._name_font = get_font(self.NAME_SIZE)
         self._text_font = pygame.font.Font(None, self.TEXT_SIZE)
         self._text_font.set_italic(speaker is None)
-        self._hint_font = pygame.font.Font(None, self.HINT_SIZE)
+        self._hint_font = get_font(self.HINT_SIZE)
         self._writer = Typewriter(45)
 
     def update(self, dt: float) -> None:
@@ -89,13 +87,7 @@ class SceneScreen(Screen):
     def _cover(self, size: tuple[int, int]) -> pygame.Surface:
         """The image scaled to fill `size`, cropped to the centre."""
         if self._scaled is None or self._scaled.get_size() != size:
-            iw, ih = self._image.get_size()
-            scale = max(size[0] / iw, size[1] / ih)
-            big = pygame.transform.smoothscale(
-                self._image, (max(size[0], round(iw * scale)), max(size[1], round(ih * scale))))
-            crop = pygame.Rect(0, 0, *size)
-            crop.center = big.get_rect().center
-            self._scaled = big.subsurface(crop).copy()
+            self._scaled = cover(self._image, size)
         return self._scaled
 
     def _wrap(self, text: str, max_width: int) -> list[str]:

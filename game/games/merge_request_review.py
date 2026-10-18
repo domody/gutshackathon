@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import math
-import os
 import random
 
-import numpy as np
 import pygame
 
+from game.assets import get_font, load_chroma, load_image
 from game.minigame import Action, Minigame
 from game.tracking import HandTracker
 from game.ui import draw_camera_preview, draw_status_line, draw_text_centered
@@ -27,23 +26,8 @@ def ease_out_cubic(value: float) -> float:
     return 1.0 - (1.0 - value) ** 3
 
 
-def chroma_surface(path: str) -> pygame.Surface:
-    image = pygame.image.load(path).convert_alpha()
-    rgb = pygame.surfarray.array3d(image)
-    alpha = pygame.surfarray.pixels_alpha(image)
-    red = rgb[:, :, 0].astype(np.int16)
-    green = rgb[:, :, 1].astype(np.int16)
-    blue = rgb[:, :, 2].astype(np.int16)
-    pink = (
-        (red > 90)
-        & (blue > 90)
-        & (green < np.minimum(red, blue) * 0.72)
-        & (np.abs(red - blue) < 115)
-    )
-    alpha[pink] = 0
-    del alpha
-    bounds = image.get_bounding_rect(min_alpha=8)
-    return image.subsurface(bounds).copy() if bounds.width and bounds.height else image
+def chroma_surface(name: str) -> pygame.Surface:
+    return load_chroma(name, min_rb=90, ratio=0.72, max_diff=115)[0]
 
 
 class MergeRequestReview(Minigame):
@@ -52,18 +36,15 @@ class MergeRequestReview(Minigame):
 
     def __init__(self, screen: pygame.Surface, tracker: HandTracker | None = None) -> None:
         super().__init__(screen, tracker)
-        self.label_font = pygame.font.Font(None, 30)
-        asset_dir = os.path.join(os.path.dirname(__file__), "assets")
-        self.background_source = pygame.image.load(
-            os.path.join(asset_dir, "merge_review_background.png")
-        ).convert()
+        self.label_font = get_font(30)
+        self.background_source = load_image("merge_review_background.png", alpha=False)
         self.request_sources = {
-            True: chroma_surface(os.path.join(asset_dir, "merge_request_good.png")),
-            False: chroma_surface(os.path.join(asset_dir, "merge_request_bad.png")),
+            True: chroma_surface("merge_request_good.png"),
+            False: chroma_surface("merge_request_bad.png"),
         }
         self.hand_sources = {
-            "palm": chroma_surface(os.path.join(asset_dir, "merge_accept_hand.png")),
-            "fist": chroma_surface(os.path.join(asset_dir, "merge_reject_fist.png")),
+            "palm": chroma_surface("merge_accept_hand.png"),
+            "fist": chroma_surface("merge_reject_fist.png"),
         }
         self._scaled_size: tuple[int, int] | None = None
         self._background: pygame.Surface | None = None

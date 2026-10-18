@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import math
-import os
 import random
 
 import pygame
 
+from game.assets import load_image
 from game.face_minigame import FaceMinigame
 from game.minigame import Action
 from game.tracking import FaceTracker
@@ -46,7 +46,6 @@ SPEECH = {
               "I'll send a summary after the meeting.", "We can test that approach this afternoon."),
 }
 NAMES = {"left": "MAYA", "forward": "PRESENTER", "right": "JAMIE"}
-ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 
 def classify_direction(yaw_off: float) -> str:
@@ -67,19 +66,19 @@ class WhosTalking(FaceMinigame):
         self.fast = fast
         self.opposite = opposite
         self.combo = combo
-        self.room_source = pygame.image.load(os.path.join(ASSET_DIR, "meeting_room.png")).convert()
+        self.room_source = load_image("meeting_room.png", alpha=False)
         self.people_source = {
             "left": {
-                False: pygame.image.load(os.path.join(ASSET_DIR, "meeting_left_idle.png")).convert_alpha(),
-                True: pygame.image.load(os.path.join(ASSET_DIR, "meeting_left_speaking.png")).convert_alpha(),
+                False: load_image("meeting_left_idle.png"),
+                True: load_image("meeting_left_speaking.png"),
             },
             "forward": {
-                False: pygame.image.load(os.path.join(ASSET_DIR, "meeting_center_idle.png")).convert_alpha(),
-                True: pygame.image.load(os.path.join(ASSET_DIR, "meeting_center_speaking.png")).convert_alpha(),
+                False: load_image("meeting_center_idle.png"),
+                True: load_image("meeting_center_speaking.png"),
             },
             "right": {
-                False: pygame.image.load(os.path.join(ASSET_DIR, "meeting_right_idle.png")).convert_alpha(),
-                True: pygame.image.load(os.path.join(ASSET_DIR, "meeting_right_speaking.png")).convert_alpha(),
+                False: load_image("meeting_right_idle.png"),
+                True: load_image("meeting_right_speaking.png"),
             },
         }
         self._art_size: tuple[int, int] | None = None
