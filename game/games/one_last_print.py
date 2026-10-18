@@ -299,7 +299,7 @@ class OneLastPrint(CalibratedMinigame):
         screen.blit(status, status.get_rect(center=status_box.center))
 
         if self.tracker.available:
-            info = "Open hand - fist - pull to chest - release and alternate; C recalibrates"
+            info = "Open hand - fist - pull to chest - release and alternate"
         else:
             detail = self.tracker.error or "camera unavailable"
             info = f"{detail} - camera tracking is required"

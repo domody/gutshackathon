@@ -254,7 +254,7 @@ class RunToMeeting(CalibratedMinigame):
         if self.tracker.available:
             body = self.tracker.body
             hands = "visible" if body and body[3] else "lowered/off-screen"
-            info = f"Body tracking: {self.tracker.backend}   hands: {hands}   C: recalibrate"
+            info = f"Body tracking: {self.tracker.backend}   hands: {hands}"
         else:
             info = "No camera tracking - A: run / D: act natural"
         draw_status_line(screen, self.small_font, info, WHITE)

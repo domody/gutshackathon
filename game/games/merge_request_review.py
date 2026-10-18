@@ -107,9 +107,7 @@ class MergeRequestReview(Minigame):
                 self._next_request()
             return
 
-        keys = pygame.key.get_pressed()
-        fallback = "palm" if keys[pygame.K_a] else "fist" if keys[pygame.K_d] else None
-        active = self.hand or fallback
+        active = self.hand or None
         if not self.gesture_armed:
             if active is None:
                 self.gesture_armed = True

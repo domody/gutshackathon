@@ -134,12 +134,6 @@ class PaperSort(Minigame):
 
         if hand is not None:
             self._read_swipe(hand[0])
-        else:
-            keys = pygame.key.get_pressed()
-            pressed = keys[pygame.K_a] or keys[pygame.K_LEFT] or keys[pygame.K_d] or keys[pygame.K_RIGHT]
-            if pressed and not self.key_down:
-                self._sort(-1 if keys[pygame.K_a] or keys[pygame.K_LEFT] else 1)
-            self.key_down = pressed
 
     def _read_swipe(self, x: float) -> None:
         if RESET_LEFT <= x <= RESET_RIGHT:
@@ -207,7 +201,7 @@ class PaperSort(Minigame):
         self._draw_count(screen, int(width * 0.20), int(height * 0.39), left_count)
         self._draw_count(screen, int(width * 0.80), int(height * 0.39), right_count)
         draw_camera_preview(screen, self.tracker)
-        info = "Hand tracking on" if self.tracker.available else "No camera - A/left or D/right to test"
+        info = "Hand tracking on" if self.tracker.available else "No camera"
         draw_status_line(screen, self.small_font, info, WHITE)
 
         if self.result is not None:

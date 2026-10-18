@@ -337,7 +337,7 @@ class ContractSigningDay(Minigame):
             if self.hand_lost:
                 info = "Hand lost - signing paused"
         else:
-            info = "No camera - mouse to move, hold click or SPACE to sign"
+            info = "No camera found"
         draw_status_line(screen, self.small_font, info, WHITE)
 
         if self.result is not None:
