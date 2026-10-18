@@ -6,6 +6,7 @@ from statistics import median
 
 import pygame
 
+from game.audio import sound_bank
 from game.assets import get_font, load_image
 from game.calibrated_minigame import CalibratedMinigame
 from game.minigame import Action
@@ -219,6 +220,7 @@ class OneLastPrint(CalibratedMinigame):
         self.idle_time = 0.0
         self.total_pulls += 1
         self.register_combo_success()
+        sound_bank.play("pull")
         self.status = f"Good pull! Reach with your {self.expected_side} hand"
 
     def _set_result(self, won: bool) -> None:

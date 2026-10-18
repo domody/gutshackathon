@@ -4,6 +4,7 @@ import math
 
 import pygame
 
+from game.audio import sound_bank
 from game.assets import get_font, load_image
 from game.minigame import Action, Minigame
 from game.tracking import HandTracker
@@ -70,6 +71,7 @@ class ContractSigningDay(Minigame):
 
     def start(self) -> None:
         super().start()
+        sound_bank.set_pen_scratching(False)
         width, height = self.screen.get_size()
         self.name = "WM"
         self.state = "name"
@@ -213,6 +215,7 @@ class ContractSigningDay(Minigame):
             position, pinch = self._read_input()
             self._trace_input(position, pinch)
             if self.off_length > MAX_OFF_LINE * self.screen.get_height():
+                sound_bank.set_pen_scratching(False)
                 self.retry_stage = "name"
                 self.state = "retry"
                 self.pause_timer = 0.0
@@ -220,6 +223,7 @@ class ContractSigningDay(Minigame):
                 self.pinching = False
                 self.status = "Outside the letters - try WM again"
             elif self.coverage >= WIN_COVERAGE:
+                sound_bank.set_pen_scratching(False)
                 if self.employee_record is not None:
                     self.employee_record.set_signature([stroke.copy() for stroke in self.strokes])
                 self.state = "name_complete"
@@ -266,6 +270,7 @@ class ContractSigningDay(Minigame):
         self._trace_input(position, pinch)
 
         if self.off_length > MAX_OFF_LINE * self.screen.get_height():
+            sound_bank.set_pen_scratching(False)
             self.retry_stage = "signing"
             self.state = "retry"
             self.pause_timer = 0.0
@@ -273,6 +278,7 @@ class ContractSigningDay(Minigame):
             self.pinching = False
             self.status = "Outside the lines - this copy is void"
         elif self.coverage >= WIN_COVERAGE:
+            sound_bank.set_pen_scratching(False)
             if self.signature_index == 0:
                 self.completed_signatures.append((self.samples.copy(), [stroke.copy() for stroke in self.strokes]))
                 self.state = "signature_complete"
@@ -284,6 +290,7 @@ class ContractSigningDay(Minigame):
             self.pinching = False
 
     def _trace_input(self, position: tuple[float, float], pinch: bool) -> None:
+        sound_bank.set_pen_scratching(pinch)
         was_pinching = self.pinching
         self.pinching = pinch
         if not pinch:
@@ -297,6 +304,10 @@ class ContractSigningDay(Minigame):
         self._sign_along(start, position)
         self.pointer = position
         self.prev_pointer = position
+
+    def close(self) -> None:
+        sound_bank.set_pen_scratching(False)
+        super().close()
 
     @property
     def coverage(self) -> float:

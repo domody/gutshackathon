@@ -5,6 +5,7 @@ import random
 
 import pygame
 
+from game.audio import sound_bank
 from game.assets import get_font, load_chroma, load_image
 from game.minigame import Action, Minigame
 from game.tracking import HandTracker
@@ -132,9 +133,11 @@ class MergeRequestReview(Minigame):
         if self.decision_correct:
             self.correct += 1
             self.register_combo_success()
+            sound_bank.play("correct")
             self.flash_text = "MERGED" if gesture == "palm" else "DECLINED"
         else:
             self.reset_combo()
+            sound_bank.play("mistake")
             self.lives -= 1
             self.flash_text = "THAT SHOULD HAVE BEEN DECLINED" if gesture == "palm" else "THAT ONE WAS SAFE"
             self.shake = 0.35

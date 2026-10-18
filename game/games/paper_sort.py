@@ -4,6 +4,7 @@ import random
 
 import pygame
 
+from game.audio import sound_bank
 from game.assets import get_font, key_pink, load_image
 from game.minigame import Action, Minigame
 from game.tracking import HandTracker
@@ -157,9 +158,11 @@ class PaperSort(Minigame):
         self.transition_t = 0.38
         if direction == expected:
             self.register_combo_success()
+            sound_bank.play("paper")
             self.message = "Filed correctly"
         else:
             self.reset_combo()
+            sound_bank.play("mistake")
             self.mistakes += 1
             self.message = "Wrong pile"
         self.armed = False

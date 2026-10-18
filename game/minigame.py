@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import pygame
 
+from game.audio import sound_bank
 from game.assets import get_font
 
 if TYPE_CHECKING:
@@ -83,6 +84,7 @@ class Minigame(ABC):
             label = "NICE WORK"
         self.combo_message = f"{label}  x{self.combo}"
         self.combo_until = pygame.time.get_ticks() + 1050
+        sound_bank.play("combo")
 
     def reset_combo(self) -> None:
         self.combo = 0

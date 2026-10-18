@@ -5,6 +5,7 @@ import random
 
 import pygame
 
+from game.audio import sound_bank
 from game.assets import load_image
 from game.face_minigame import FaceMinigame
 from game.minigame import Action
@@ -152,6 +153,7 @@ class WhosTalking(FaceMinigame):
         if self.hold >= HOLD_SECONDS and self.talking_t >= SPEAK_SECONDS:
             self.done += 1
             self.register_combo_success()
+            sound_bank.play("correct")
             self.feedback = random.choice(("NATURAL.", "GOOD LISTENING.", "NAILED IT."))
             self.feedback_t = 0.65
             if self.done >= TARGET_TURNS:
@@ -163,6 +165,7 @@ class WhosTalking(FaceMinigame):
         self.turn_left -= dt
         if self.turn_left <= 0.0:
             self.reset_combo()
+            sound_bank.play("mistake")
             self.feedback = "WRONG PERSON."
             self.finish(False)
 

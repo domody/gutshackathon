@@ -6,6 +6,7 @@ from statistics import median
 
 import pygame
 
+from game.audio import sound_bank
 from game.assets import get_font, load_image, scale_to_height
 from game.calibrated_minigame import CalibratedMinigame
 from game.minigame import Action
@@ -83,6 +84,7 @@ class RunToMeeting(CalibratedMinigame):
 
     def start(self) -> None:
         super().start()
+        sound_bank.set_running(False)
         self.elapsed = 0.0
         self.course = 0.0
         self.phase = "clear"
@@ -128,10 +130,12 @@ class RunToMeeting(CalibratedMinigame):
         self.animation_time += dt
 
         if self.mode == "calibrate":
+            sound_bank.set_running(False)
             self.update_calibration(dt)
             return
 
         if self.result is not None:
+            sound_bank.set_running(False)
             self.result_timer += dt
             if self.result_timer >= RESULT_SECONDS:
                 self.finish(self.result)
@@ -140,17 +144,20 @@ class RunToMeeting(CalibratedMinigame):
         camera = self.tracker.available
         body = self.tracker.body if camera else None
         if camera and body is None:
+            sound_bank.set_running(False)
             self.running_detected = False
             self.status = "Paused - step back into view"
             return
 
         pump, motion, width, hands_visible = body if camera else (0.0, 0.0, 0.0, True)
         if camera and not self.distance_ok(width):
+            sound_bank.set_running(False)
             self.running_detected = False
             self.status = "Paused - return to your calibrated distance"
             return
 
         if self.intro_timer > 0:
+            sound_bank.set_running(False)
             self.intro_timer = max(0.0, self.intro_timer - dt)
             return
 
@@ -164,6 +171,7 @@ class RunToMeeting(CalibratedMinigame):
         moving = motion > self.still_threshold
         can_sprint = self.phase in ("clear", "approaching", "departing")
         self.running_detected = running and can_sprint and self.chat_timer <= 0
+        sound_bank.set_running(self.running_detected)
 
         if self.phase == "clear":
             self.exposure = max(0.0, self.exposure - dt * 3)
@@ -204,6 +212,7 @@ class RunToMeeting(CalibratedMinigame):
             self._finish_game(False)
 
     def _get_caught(self) -> None:
+        sound_bank.set_running(False)
         self.reset_combo()
         self.caught_this_encounter = True
         self.caught_count += 1
@@ -217,9 +226,14 @@ class RunToMeeting(CalibratedMinigame):
         self.status = "Got a quick minute?"
 
     def _finish_game(self, won: bool) -> None:
+        sound_bank.set_running(False)
         self.result = won
         self.result_timer = 0.0
         self.running_detected = False
+
+    def close(self) -> None:
+        sound_bank.set_running(False)
+        super().close()
 
     def _update_phase(self) -> None:
         if self.phase_time < self.phase_duration:
