@@ -155,18 +155,35 @@ class BadgePhotoScreen(Screen):
         status = body_font.render(self.status, True, (180, 211, 227))
         surface.blit(status, status.get_rect(midtop=(width // 2, int(height * 0.76))))
         if self.mode == "review":
-            self._draw_action(surface, "OPEN HAND", "RETAKE", width // 2 - 145, int(height * 0.88))
-            self._draw_action(surface, "PINCH", "USE PHOTO", width // 2 + 145, int(height * 0.88))
+            offset = self._action_size(surface)[0] // 2 + 16
+            self._draw_action(surface, "OPEN HAND", "RETAKE", width // 2 - offset, int(height * 0.88))
+            self._draw_action(surface, "PINCH", "USE PHOTO", width // 2 + offset, int(height * 0.88))
         elif self.mode == "ready" and image is not None:
             self._draw_action(surface, "PINCH", "TAKE PHOTO", width // 2, int(height * 0.88))
         elif self.mode == "ready":
             self._draw_action(surface, "OPEN HAND", "SKIP PHOTO", width // 2, int(height * 0.88))
 
+    ACTION_LABELS = (("OPEN HAND", "RETAKE"), ("PINCH", "USE PHOTO"), ("PINCH", "TAKE PHOTO"), ("OPEN HAND", "SKIP PHOTO"))
+    ACTION_PAD = 8
+
+    def _action_fonts(self, surface: pygame.Surface) -> tuple[pygame.font.Font, pygame.font.Font]:
+        size = max(14, min(22, surface.get_width() // 58))
+        return get_font(size - 3), get_font(size)
+
+    def _action_size(self, surface: pygame.Surface) -> tuple[int, int]:
+        gesture_font, action_font = self._action_fonts(surface)
+        content = max(
+            gesture_font.size(g)[0] + action_font.size(a)[0] for g, a in self.ACTION_LABELS
+        )
+        width = max(content + 3 * self.ACTION_PAD, int(surface.get_width() * 0.2))
+        return width, action_font.get_height() + 2 * self.ACTION_PAD
+
     def _draw_action(self, surface: pygame.Surface, gesture: str, action: str, x: int, y: int) -> None:
-        panel = pygame.Rect(0, 0, 230, 54)
+        panel = pygame.Rect((0, 0), self._action_size(surface))
         panel.center = (x, y)
         pygame.draw.rect(surface, (21, 63, 92), panel, border_radius=12)
-        gesture_art = get_font(19).render(gesture, True, (255, 215, 90))
-        action_art = get_font(22).render(action, True, (249, 248, 238))
-        surface.blit(gesture_art, gesture_art.get_rect(midright=(panel.centerx - 7, panel.centery)))
-        surface.blit(action_art, action_art.get_rect(midleft=(panel.centerx + 7, panel.centery)))
+        gesture_font, action_font = self._action_fonts(surface)
+        gesture_art = gesture_font.render(gesture, True, (255, 215, 90))
+        action_art = action_font.render(action, True, (249, 248, 238))
+        surface.blit(gesture_art, gesture_art.get_rect(midleft=(panel.left + self.ACTION_PAD, panel.centery)))
+        surface.blit(action_art, action_art.get_rect(midright=(panel.right - self.ACTION_PAD, panel.centery)))
