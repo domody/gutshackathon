@@ -215,7 +215,10 @@ class WhosTalking(FaceMinigame):
             lines.append(line)
         bw = min(286, max(font.size(line)[0] for line in lines) + 28)
         bh = 22 * len(lines) + 24
-        bx = max(8, min(screen.get_width() - bw - 8, x - bw // 2))
+        right_edge = screen.get_width() - 8
+        if x > screen.get_width() * 0.66:
+            right_edge = screen.get_width() - 212
+        bx = max(8, min(right_edge - bw, x - bw // 2))
         by = 145
         pygame.draw.rect(screen, WHITE, (bx, by, bw, bh), border_radius=12)
         pygame.draw.rect(screen, CHASE_BLUE, (bx, by, bw, bh), 3, border_radius=12)

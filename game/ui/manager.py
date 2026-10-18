@@ -2,6 +2,7 @@ from typing import Callable
 
 import pygame
 
+from game.audio import sound_bank
 from game.ui.screen import Screen
 
 Backdrop = Callable[[pygame.Surface], None]
@@ -31,6 +32,7 @@ class ScreenManager:
         self._state = "in" if screen.fade_in > 0 else "idle"
         self._t = 0.0
         screen.on_enter()
+        sound_bank.play(getattr(screen, "sound", "transition"))
 
     def clear(self) -> None:
         if self.current:
@@ -56,6 +58,7 @@ class ScreenManager:
         self._t = 0.0
         self._after = after
         self._fade_bg = fade_background
+        sound_bank.play("confirm")
         if backdrop:
             self._backdrop = backdrop
 
@@ -95,6 +98,8 @@ class ScreenManager:
             bg_alpha = alpha if self._fade_bg else 1.0
         else:
             alpha = bg_alpha = 1.0
+        alpha = alpha * alpha * (3 - 2 * alpha)
+        bg_alpha = bg_alpha * bg_alpha * (3 - 2 * bg_alpha)
         self._draw_faded(surface, cur.draw_background, bg_alpha)
         self._draw_faded(surface, cur.draw, alpha)
 

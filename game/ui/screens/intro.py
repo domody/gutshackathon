@@ -70,7 +70,7 @@ class MinigameIntro(Screen):
 
         title_rect = w.draw(surface, self._title_font, self.minigame.title, self.TITLE_COLOR,
                             midtop=(center_x, height // 8))
-        subtitle_rect = w.draw(surface, self._subtitle_font, "Actions", self.TEXT_COLOR,
+        subtitle_rect = w.draw(surface, self._subtitle_font, "HOW TO PLAY", self.TEXT_COLOR,
                                midtop=(center_x, title_rect.bottom + 30))
 
         top = subtitle_rect.bottom + 40
@@ -111,5 +111,5 @@ class MinigameIntro(Screen):
         return lines
 
     def _draw_button(self, surface: pygame.Surface, center_x: int, top: int) -> None:
-        text = self._button_font.render("PINCH TO START", True, self.BUTTON_COLOR)
+        text = self._button_font.render("PINCH TO BEGIN", True, self.BUTTON_COLOR)
         surface.blit(text, text.get_rect(midtop=(center_x, top)))

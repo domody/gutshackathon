@@ -13,6 +13,8 @@ TOLERANCE = 0.036
 MAX_OFF_LINE = 0.1
 WIN_COVERAGE = 0.98
 SAMPLE_SPACING = 6
+POINTER_DEAD_ZONE = 1.8
+POINTER_MAX_STEP = 95.0
 SLIDE_SECONDS = 0.72
 PAGE_PAUSE = 1.1
 RETRY_PAUSE = 1.2
@@ -51,6 +53,7 @@ class ContractSigningDay(Minigame):
         self.desk_crop = (0, 0)
         self.desk_scale = 1.0
         self.pen_sprite = pygame.transform.smoothscale(self.pen_source, (112, 114))
+        self.employee_record = None
         self.start()
 
     @property
@@ -81,6 +84,7 @@ class ContractSigningDay(Minigame):
         self.result: bool | None = None
         self.paper_rect = self._paper_rect(width, height)
         self.pointer = (width / 2, height / 2)
+        self.filtered_pointer: tuple[float, float] | None = None
         self.prev_pointer: tuple[float, float] | None = None
         self.pinching = False
         self.hand_lost = False
@@ -135,6 +139,7 @@ class ContractSigningDay(Minigame):
         self.strokes = []
         self.prev_pointer = None
         self.pinching = False
+        self.filtered_pointer = None
 
     def _build_signature(self, page_index: int) -> list[tuple[float, float]]:
         return self._signature_points(self.signature_index)
@@ -167,9 +172,29 @@ class ContractSigningDay(Minigame):
         if self.tracker.available:
             self.hand_lost = hand is None
             if hand is None:
+                self.filtered_pointer = None
                 return self.pointer, False
-            return (hand[0] * width, hand[1] * height), hand[2]
+            raw = (hand[0] * width, hand[1] * height)
+            if self.filtered_pointer is None:
+                self.filtered_pointer = raw
+            else:
+                distance = math.dist(self.filtered_pointer, raw)
+                if distance > POINTER_MAX_STEP:
+                    scale = POINTER_MAX_STEP / distance
+                    raw = (
+                        self.filtered_pointer[0] + (raw[0] - self.filtered_pointer[0]) * scale,
+                        self.filtered_pointer[1] + (raw[1] - self.filtered_pointer[1]) * scale,
+                    )
+                    distance = POINTER_MAX_STEP
+                if distance > POINTER_DEAD_ZONE:
+                    amount = min(0.62, 0.20 + distance / 180.0)
+                    self.filtered_pointer = (
+                        self.filtered_pointer[0] + (raw[0] - self.filtered_pointer[0]) * amount,
+                        self.filtered_pointer[1] + (raw[1] - self.filtered_pointer[1]) * amount,
+                    )
+            return self.filtered_pointer, hand[2]
         self.hand_lost = True
+        self.filtered_pointer = None
         return pygame.mouse.get_pos(), pygame.mouse.get_pressed()[0]
 
     def update(self, dt: float) -> None:
@@ -194,6 +219,8 @@ class ContractSigningDay(Minigame):
                 self.pinching = False
                 self.status = "Outside the letters - try WM again"
             elif self.coverage >= WIN_COVERAGE:
+                if self.employee_record is not None:
+                    self.employee_record.set_signature([stroke.copy() for stroke in self.strokes])
                 self.state = "name_complete"
                 self.pause_timer = 0.0
                 self.pinching = False
@@ -300,6 +327,7 @@ class ContractSigningDay(Minigame):
         self.strokes = []
         self.prev_pointer = None
         self.pinching = False
+        self.filtered_pointer = None
 
     def _sign_along(self, start: tuple[float, float], end: tuple[float, float]) -> None:
         distance = math.dist(start, end)

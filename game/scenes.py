@@ -13,7 +13,7 @@ class Scene:
 
 BEFORE_SCENES: dict[type[Minigame], tuple[Scene, ...]] = {
     ContractSigningDay: (
-        Scene("receptionist_welcome", "Welcome! Put your name here, then sign both agreements.", "Receptionist"),
+        Scene("receptionist_welcome", "Welcome to JPMorganChase. Let's get you checked in for your first day.", "Receptionist"),
     ),
     RunToMeeting: (
         Scene("receptionist_late", "Your meeting has already started. You should probably run.", "Receptionist"),

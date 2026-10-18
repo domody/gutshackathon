@@ -2,13 +2,15 @@ from collections.abc import Callable
 
 import pygame
 
+from game.employee import EmployeeRecord
 from game.games import MergeRequestReview, CoffeeRun, ContractSigningDay, RunToMeeting, DodgeTheManager, PaperSort, OneLastPrint, WhosTalking
 from game.minigame import Minigame
 from game.scenes import AFTER_SCENES, BEFORE_SCENES, Scene
 from game.settings import Settings
 from game.tracking import HandTracker
 from game.ui import ScreenManager, draw_score
-from game.ui.screens import FailScreen, FinalScoreScreen, FiredScreen, Menu, MenuItem, MinigameIntro, PassScreen, SceneScreen
+from game.ui.screens import BadgePhotoScreen, FailScreen, FinalScoreScreen, FiredScreen, Menu, MenuItem, MinigameIntro, PassScreen, SceneScreen
+from game.workday import WorkdayChapterScreen, WorkdayClock
 
 
 class Game:
@@ -33,6 +35,9 @@ class Game:
         self.strikes = 0
         self.total_score = 0
         self.day_results: list[tuple[str, int, bool]] = []
+        self.employee_record: EmployeeRecord | None = None
+        self.workday = WorkdayClock()
+        self.photo_offered = False
         self.navigation_tracker = HandTracker()
         self.pinch_was_down = False
         self.ui = ScreenManager()
@@ -47,6 +52,9 @@ class Game:
         self.strikes = 0
         self.total_score = 0
         self.day_results = []
+        self.employee_record = EmployeeRecord()
+        self.workday = WorkdayClock()
+        self.photo_offered = False
         self.remaining = self.minigames.copy()
         self.next_minigame()
 
@@ -63,11 +71,34 @@ class Game:
             return
         cls = self.remaining.pop(0)
         self.minigame = cls(self.screen)
+        self.workday.enter(self.minigame.title)
+        if isinstance(self.minigame, ContractSigningDay):
+            self.minigame.employee_record = self.employee_record
         self.minigame.day_strikes = self.strikes
         self.minigame.close()
         self.navigation_tracker.start()
         self.pinch_was_down = False
-        self._show_scene_sequence(BEFORE_SCENES.get(cls, ()), self.show_intro)
+        self._show_scene_sequence(BEFORE_SCENES.get(cls, ()), self.show_onboarding)
+
+    def show_onboarding(self) -> None:
+        if isinstance(self.minigame, ContractSigningDay) and not self.photo_offered:
+            self.photo_offered = True
+            if self.employee_record is None:
+                self.employee_record = EmployeeRecord()
+                self.minigame.employee_record = self.employee_record
+            self.ui.show(BadgePhotoScreen(
+                self.navigation_tracker,
+                self.employee_record,
+                lambda: self.ui.dismiss(self.show_workday_chapter),
+            ))
+            return
+        self.show_workday_chapter()
+
+    def show_workday_chapter(self) -> None:
+        self.ui.show(WorkdayChapterScreen(
+            self.workday,
+            lambda: self.ui.dismiss(self.show_intro),
+        ))
 
     def _show_scene_sequence(self, scenes: tuple[Scene, ...], after: Callable[[], None]) -> None:
         if not scenes:
@@ -92,11 +123,14 @@ class Game:
         self._show_scene_sequence(scenes, after)
 
     def show_final_score(self) -> None:
+        if self.strikes < 3:
+            self.workday.complete()
         self.ui.show(FinalScoreScreen(
             lambda: self.ui.dismiss(self._return_to_menu),
             self.day_results,
             self.total_score,
             self.strikes,
+            employee_record=self.employee_record,
         ))
 
     def _return_to_menu(self) -> None:
@@ -173,7 +207,7 @@ class Game:
                 if self.strikes >= 3:
                     self.remaining.clear()
                     screen = FiredScreen(
-                        lambda: self.ui.dismiss(self.next_minigame),
+                        lambda: self.ui.dismiss(self.show_final_score),
                         total_score=self.total_score,
                         round_score=self.minigame.score,
                     )
@@ -215,4 +249,9 @@ class Game:
                 displayed_score,
                 camera_available=tracker is not None and tracker.available,
             )
+        if self.minigame and not isinstance(
+            self.ui.current,
+            (BadgePhotoScreen, FinalScoreScreen, WorkdayChapterScreen),
+        ):
+            self.workday.draw(self.screen)
         pygame.display.flip()

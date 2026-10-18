@@ -89,23 +89,26 @@ class ResultScreen(Screen):
                 score = self._score_font.render(f"Total Score: {self.total_score:,}", True, self.DESC_COLOR)
                 surface.blit(score, score.get_rect(midtop=(width // 2, score_y)))
         if w.done:
-            hint = self._hint_font.render("Pinch your fingers together to continue", True, self.HINT_COLOR)
+            hint = self._hint_font.render("PINCH TO CONTINUE", True, self.HINT_COLOR)
             surface.blit(hint, hint.get_rect(midbottom=(width // 2, height - 40)))
 
 
 class PassScreen(ResultScreen):
+    sound = "success"
     TITLE = "You Pass"
     DESCRIPTION = "Onto the next level."
     TITLE_COLOR = (110, 230, 150)
 
 
 class FailScreen(ResultScreen):
+    sound = "failure"
     TITLE = "You Fail"
     DESCRIPTION = "Better luck next time."
     TITLE_COLOR = (235, 90, 90)
 
 
 class FiredScreen(ResultScreen):
+    sound = "failure"
     TITLE = "You're Fired"
     DESCRIPTION = "Three strikes. Pack up your desk."
     TITLE_COLOR = (235, 90, 90)
