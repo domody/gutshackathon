@@ -1,4 +1,4 @@
-# Python
+# Python files
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -9,17 +9,20 @@ dist/
 .venv/
 venv/
 
-# Tooling caches
+# Tool caches
 .ruff_cache/
 .mypy_cache/
 .pytest_cache/
 
-# Editors / OS
+# Editor and operating system files
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
 
-# Claude Code local settings
+# Local tool settings
 .claude/settings.local.json
 CLAUDE.md
+
+# MediaPipe model files
+*.task
