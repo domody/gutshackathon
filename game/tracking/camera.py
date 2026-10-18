@@ -49,11 +49,14 @@ class CameraTracker(ABC):
         self._running = False
         self._lock = threading.Lock()
         self._preview: bytes | None = None
+        self._snapshot: tuple[bytes, tuple[int, int], float] | None = None
 
     # Manage camera and worker-thread lifetime.
     def start(self) -> None:
         if self._running:
             return
+        with self._lock:
+            self._snapshot = None
         # Open the camera on the main thread because macOS requires it.
         cap = cv2.VideoCapture(self.camera_index)
         if not cap.isOpened():
@@ -109,6 +112,12 @@ class CameraTracker(ABC):
                 time.sleep(0.01)
                 continue
             frame = cv2.flip(frame, 1)  # Mirror the preview so movement feels natural.
+            # Keep a clean still without tracking dots; the game owns all camera access.
+            sh, sw = frame.shape[:2]
+            snapshot_size = (480, max(1, round(sh * 480 / sw)))
+            clean = cv2.cvtColor(cv2.resize(frame, snapshot_size), cv2.COLOR_BGR2RGB).tobytes()
+            with self._lock:
+                self._snapshot = (clean, snapshot_size, time.monotonic())
             try:
                 marks = self._process(frame)
             except Exception as exc:
@@ -143,3 +152,14 @@ class CameraTracker(ABC):
         if data is None:
             return None
         return pygame.image.frombuffer(data, self.preview_size, "RGB")
+
+    def snapshot_surface(self) -> pygame.Surface | None:
+        """A fresh, clean camera still; never reuse a prior player's stale frame."""
+        with self._lock:
+            snapshot = self._snapshot
+        if not self._running or snapshot is None:
+            return None
+        data, size, stamp = snapshot
+        if time.monotonic() - stamp > self.stale_seconds:
+            return None
+        return pygame.image.frombuffer(data, size, "RGB").copy()

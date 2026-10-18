@@ -51,6 +51,7 @@ class ContractSigningDay(Minigame):
         self.desk_crop = (0, 0)
         self.desk_scale = 1.0
         self.pen_sprite = pygame.transform.smoothscale(self.pen_source, (112, 114))
+        self.employee_record = None
         self.start()
 
     @property
@@ -247,6 +248,8 @@ class ContractSigningDay(Minigame):
         elif self.coverage >= WIN_COVERAGE:
             if self.signature_index == 0:
                 self.completed_signatures.append((self.samples.copy(), [stroke.copy() for stroke in self.strokes]))
+                if self.employee_record is not None:
+                    self.employee_record.set_signature(self.strokes)
                 self.state = "signature_complete"
                 self.status = "Internship agreement signed"
             else:
