@@ -9,13 +9,13 @@ from game.minigame import Action, Minigame
 from game.tracking import HandTracker
 from game.ui import draw_bar, draw_camera_preview, draw_status_line, draw_text_centered
 
-TOLERANCE = 0.034
-MAX_OFF_LINE = 0.085
-WIN_COVERAGE = 0.99
+TOLERANCE = 0.036
+MAX_OFF_LINE = 0.1
+WIN_COVERAGE = 0.98
 SAMPLE_SPACING = 6
 SLIDE_SECONDS = 0.72
-PAGE_PAUSE = 1.15
-RETRY_PAUSE = 1.25
+PAGE_PAUSE = 1.1
+RETRY_PAUSE = 1.2
 END_DELAY = 2.2
 
 DESK = (75, 55, 43)
