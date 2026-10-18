@@ -5,6 +5,7 @@ from collections.abc import Callable
 
 import pygame
 
+from game.audio import sound_bank
 from game.assets import cover, get_font
 from game.employee import EmployeeRecord
 from game.ui.screen import Screen
@@ -17,6 +18,7 @@ class BadgePhotoScreen(Screen):
     fade_out = 0.3
     RETAKE_HOLD_SECONDS = 0.9
     REVIEW_GESTURE_DELAY = 0.45
+    FLASH_SECONDS = 0.24
 
     def __init__(self, tracker, record: EmployeeRecord, on_continue: Callable[[], None]) -> None:
         self.tracker = tracker
@@ -27,6 +29,7 @@ class BadgePhotoScreen(Screen):
         self.photo: pygame.Surface | None = None
         self.retake_hold = 0.0
         self.review_age = 0.0
+        self.flash_t = 0.0
         self.status = "PINCH TO START COUNTDOWN"
 
     def gesture_continue(self) -> None:
@@ -41,6 +44,13 @@ class BadgePhotoScreen(Screen):
                 self.status = "HOLD THAT EMPLOYABLE EXPRESSION"
 
     def update(self, dt: float) -> None:
+        if self.mode == "flash":
+            self.flash_t = max(0.0, self.flash_t - dt)
+            if self.flash_t <= 0.0:
+                self.mode = "review"
+                self.review_age = 0.0
+                self.status = "OPEN HAND TO RETAKE     PINCH TO USE PHOTO"
+            return
         if self.mode == "review":
             self.review_age += dt
             if self.review_age >= self.REVIEW_GESTURE_DELAY and getattr(self.tracker, "gesture", None) == "palm":
@@ -72,10 +82,12 @@ class BadgePhotoScreen(Screen):
         self.countdown -= dt
         if self.countdown <= 0:
             self.photo = frame.copy()
-            self.mode = "review"
+            self.mode = "flash"
+            self.flash_t = self.FLASH_SECONDS
             self.retake_hold = 0.0
             self.review_age = 0.0
-            self.status = "OPEN HAND TO RETAKE     PINCH TO USE PHOTO"
+            self.status = "PHOTO CAPTURED"
+            sound_bank.play("shutter")
 
     def _accept(self) -> None:
         if self.photo is None:
@@ -117,7 +129,7 @@ class BadgePhotoScreen(Screen):
         pygame.draw.rect(frame, (247, 243, 225), frame.get_rect(), border_radius=18)
         surface.blit(frame, box.inflate(18, 18))
 
-        image = self.photo if self.mode == "review" else self.tracker.snapshot_surface()
+        image = self.photo if self.mode in ("flash", "review") else self.tracker.snapshot_surface()
         if image is not None:
             surface.blit(cover(image, box.size), box)
         else:
@@ -133,6 +145,12 @@ class BadgePhotoScreen(Screen):
                 str(max(1, math.ceil(self.countdown))), True, (255, 215, 90)
             )
             surface.blit(number, number.get_rect(center=box.center))
+
+        if self.mode == "flash":
+            strength = min(1.0, self.flash_t / self.FLASH_SECONDS)
+            flash = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+            flash.fill((255, 255, 248, round(245 * strength)))
+            surface.blit(flash, (0, 0))
 
         status = body_font.render(self.status, True, (180, 211, 227))
         surface.blit(status, status.get_rect(midtop=(width // 2, int(height * 0.76))))
