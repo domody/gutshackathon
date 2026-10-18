@@ -34,7 +34,7 @@ WHITE = (250, 250, 247)
 ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 
-class Dalgona(Minigame):
+class ContractSigningDay(Minigame):
     title = "Contract Signing Day"
     tracker_cls = HandTracker
 

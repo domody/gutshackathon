@@ -59,7 +59,7 @@ def _scale_height(image: pygame.Surface, height: int) -> pygame.Surface:
     return pygame.transform.smoothscale(image, (width, height))
 
 
-class RedLightGreenLight(CalibratedMinigame):
+class RunToMeeting(CalibratedMinigame):
     title = "Act Natural"
     tracker_cls = BodyTracker
     distance_tolerance = 0.38

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from game.games import CatchOrDrop, CoffeeRun, Dalgona, DodgeTheManager, PaperSort, RedLightGreenLight, TugOfWar, simonsays
+from game.games import MergeRequestReview, CoffeeRun, ContractSigningDay, DodgeTheManager, PaperSort, RunToMeeting, OneLastPrint, WhosTalking
 from game.minigame import Minigame
 
 
@@ -12,13 +12,13 @@ class Scene:
 
 
 BEFORE_SCENES: dict[type[Minigame], tuple[Scene, ...]] = {
-    Dalgona: (
+    ContractSigningDay: (
         Scene("receptionist_welcome", "Welcome! Put your name here, then sign both agreements.", "Receptionist"),
     ),
-    RedLightGreenLight: (
+    RunToMeeting: (
         Scene("receptionist_late", "Your meeting has already started. You should probably run.", "Receptionist"),
     ),
-    simonsays: (
+    WhosTalking: (
         Scene("metting_late", "There you are. Sit down and try to follow who's speaking.", "Colleague"),
     ),
     DodgeTheManager: (
@@ -27,13 +27,13 @@ BEFORE_SCENES: dict[type[Minigame], tuple[Scene, ...]] = {
     PaperSort: (
         Scene("papers_unsorted", "Perfect, thank you for volunteering! Expenses left, contracts right.", "Manager"),
     ),
-    CatchOrDrop: (
+    MergeRequestReview: (
         Scene("desk", "Back at your desk, the merge requests are already piling up."),
     ),
     CoffeeRun: (
         Scene("boss_coffee", "Before you go, could you grab me some coffee?", "Boss"),
     ),
-    TugOfWar: (
+    OneLastPrint: (
         Scene("printer", "One last print. Then you can go home."),
     ),
 }
@@ -42,7 +42,7 @@ AFTER_SCENES: dict[type[Minigame], tuple[Scene, ...]] = {
     PaperSort: (
         Scene("papers_sorted", "Excellent. I knew volunteering was the right choice for you.", "Manager"),
     ),
-    TugOfWar: (
+    OneLastPrint: (
         Scene("jpmc_building", "Wow. What a first day."),
     ),
 }

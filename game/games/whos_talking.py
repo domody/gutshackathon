@@ -57,7 +57,7 @@ def classify_direction(yaw_off: float) -> str:
     return "forward"
 
 
-class simonsays(FaceMinigame):
+class WhosTalking(FaceMinigame):
     title = "Who's Talking?"
     after_calibration = "ready"
 

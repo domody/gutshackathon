@@ -46,7 +46,7 @@ def chroma_surface(path: str) -> pygame.Surface:
     return image.subsurface(bounds).copy() if bounds.width and bounds.height else image
 
 
-class CatchOrDrop(Minigame):
+class MergeRequestReview(Minigame):
     title = "Merge Request Review"
     tracker_cls = HandTracker
 

@@ -1,10 +1,10 @@
-from game.games.catch_or_drop import CatchOrDrop
+from game.games.merge_request_review import MergeRequestReview
 from game.games.coffee_run import CoffeeRun
-from game.games.dalgona import Dalgona
+from game.games.contract_signing_day import ContractSigningDay
 from game.games.dodge_the_manager import DodgeTheManager
 from game.games.paper_sort import PaperSort
-from game.games.redlight_greenlight import RedLightGreenLight
-from game.games.simon_says import simonsays
-from game.games.tug_of_war import TugOfWar
+from game.games.run_to_meeting import RunToMeeting
+from game.games.whos_talking import WhosTalking
+from game.games.one_last_print import OneLastPrint
 
-__all__ = ["CatchOrDrop", "CoffeeRun", "Dalgona", "RedLightGreenLight", "simonsays", "DodgeTheManager", "PaperSort", "TugOfWar"]
+__all__ = ["MergeRequestReview", "CoffeeRun", "ContractSigningDay", "RunToMeeting", "WhosTalking", "DodgeTheManager", "PaperSort", "OneLastPrint"]

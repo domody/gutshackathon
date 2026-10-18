@@ -39,7 +39,7 @@ WHITE = (248, 248, 243)
 MUTED = (134, 143, 149)
 
 
-class TugOfWar(CalibratedMinigame):
+class OneLastPrint(CalibratedMinigame):
     title = "One Last Print"
     tracker_cls = PullTracker
     calibrate_timeout = 6.0

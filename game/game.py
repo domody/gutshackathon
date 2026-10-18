@@ -2,7 +2,7 @@ from collections.abc import Callable
 
 import pygame
 
-from game.games import CatchOrDrop, CoffeeRun, Dalgona, RedLightGreenLight, DodgeTheManager, PaperSort, TugOfWar, simonsays
+from game.games import MergeRequestReview, CoffeeRun, ContractSigningDay, RunToMeeting, DodgeTheManager, PaperSort, OneLastPrint, WhosTalking
 from game.minigame import Minigame
 from game.scenes import AFTER_SCENES, BEFORE_SCENES, Scene
 from game.settings import Settings
@@ -26,7 +26,7 @@ class Game:
         self.clock = pygame.time.Clock()
         self.running = False
         self.minigames: list[type[Minigame]] = [
-            Dalgona, RedLightGreenLight, simonsays, DodgeTheManager, CatchOrDrop, CoffeeRun, TugOfWar,
+            ContractSigningDay, RunToMeeting, WhosTalking, DodgeTheManager, MergeRequestReview, CoffeeRun, OneLastPrint,
         ]
         self.remaining: list[type[Minigame]] = []
         self.minigame: Minigame | None = None
