@@ -47,6 +47,7 @@ class OneLastPrint(CalibratedMinigame):
 
     def __init__(self, screen: pygame.Surface, tracker: PullTracker | None = None) -> None:
         super().__init__(screen, tracker)
+<<<<<<< HEAD:game/games/one_last_print.py
         self.title_font = get_font(64)
         self.clock_font = get_font(46)
         self.printer_font = get_font(25)
@@ -54,11 +55,20 @@ class OneLastPrint(CalibratedMinigame):
         self.room_source = load_image("printer_room.png", alpha=False)
         self.printer_source = load_image("printer_machine.png")
         self.paper_source = load_image("printer_paper.png")
+=======
+        self.title_font = pygame.font.Font(None, 64)
+        self.clock_font = pygame.font.Font(None, 46)
+        self.result_font = pygame.font.Font(None, 58)
+        asset_dir = os.path.join(os.path.dirname(__file__), "assets")
+        self.room_source = pygame.image.load(os.path.join(asset_dir, "printer_room.png")).convert()
+        self.state_sources = [
+            pygame.image.load(os.path.join(asset_dir, f"printer_state_{index}.png")).convert_alpha()
+            for index in range(5)
+        ]
+>>>>>>> ec807f6 (Printer game UI redesign):game/games/tug_of_war.py
         self.art_size: tuple[int, int] | None = None
         self.room_art: pygame.Surface | None = None
-        self.printer_art: pygame.Surface | None = None
-        self.paper_art: pygame.Surface | None = None
-        self.paper_pile_art: pygame.Surface | None = None
+        self.state_art: list[pygame.Surface] = []
         self.start()
 
     @property
@@ -229,9 +239,7 @@ class OneLastPrint(CalibratedMinigame):
 
     def draw(self, screen: pygame.Surface) -> None:
         width, height = screen.get_size()
-        self._draw_office(screen, width, height)
-        self._draw_paper(screen, width, height)
-        self._draw_printer(screen, width, height)
+        self._draw_scene(screen, width, height)
         self._draw_hud(screen, width, height)
         draw_camera_preview(screen, self.tracker)
 
@@ -245,9 +253,28 @@ class OneLastPrint(CalibratedMinigame):
         if self.result is not None:
             self._draw_result(screen, width, height)
 
-    def _draw_office(self, screen: pygame.Surface, width: int, height: int) -> None:
+    def _draw_scene(self, screen: pygame.Surface, width: int, height: int) -> None:
         self._prepare_art(width, height)
         screen.blit(self.room_art, (0, 0))
+
+        if self.result is True:
+            screen.blit(self.state_art[4], (0, 0))
+        else:
+            progress = max(0.0, min(0.999, self.extraction / 100.0))
+            if progress < 0.24:
+                state = 0
+            elif progress < 0.52:
+                state = 1
+            elif progress < 0.78:
+                state = 2
+            else:
+                state = 3
+            screen.blit(self.state_art[state], (0, 0))
+
+        if self.pull_flash > 0 and self.result is None:
+            flash = pygame.Surface((width, height), pygame.SRCALPHA)
+            flash.fill((255, 244, 201, round(24 * min(1.0, self.pull_flash / 0.34))))
+            screen.blit(flash, (0, 0))
 
         clock = pygame.Rect(0, 0, 116, 48)
         clock.midtop = (width // 2, 18)
@@ -261,71 +288,7 @@ class OneLastPrint(CalibratedMinigame):
             return
         self.art_size = (width, height)
         self.room_art = pygame.transform.smoothscale(self.room_source, (width, height))
-        printer_h = int(height * 0.34)
-        printer_w = round(self.printer_source.get_width() * printer_h / self.printer_source.get_height())
-        printer = pygame.transform.smoothscale(self.printer_source, (printer_w, printer_h))
-        self.printer_art = pygame.transform.flip(printer, True, False)
-        paper_h = max(92, int(height * 0.18))
-        paper_w = int(width * 0.50)
-        self.paper_art = pygame.transform.smoothscale(self.paper_source, (paper_w, paper_h))
-        pile_h = max(68, int(height * 0.13))
-        pile_w = int(width * 0.24)
-        self.paper_pile_art = pygame.transform.smoothscale(self.paper_source, (pile_w, pile_h))
-
-    def _printer_rect(self, width: int, height: int) -> pygame.Rect:
-        rect = self.printer_art.get_rect()
-        rect.bottomright = (int(width * 0.94), int(height * 0.72))
-        return rect
-
-    def _draw_printer(self, screen: pygame.Surface, width: int, height: int) -> None:
-        shaking = self.pull_flash > 0 and self.result is None
-        shake = int(math.sin(self.pull_flash * 90) * 5) if shaking else 0
-        printer = self._printer_rect(width, height).move(shake, 0)
-        shadow = pygame.Surface((printer.width + 24, 32), pygame.SRCALPHA)
-        pygame.draw.ellipse(shadow, (31, 25, 21, 70), shadow.get_rect())
-        screen.blit(shadow, (printer.x - 4, printer.bottom - 15))
-        screen.blit(self.printer_art, printer)
-
-        display = pygame.Rect(
-            printer.x + int(printer.width * 0.08),
-            printer.y + int(printer.height * 0.36),
-            int(printer.width * 0.16),
-            max(24, int(printer.height * 0.105)),
-        )
-        pygame.draw.rect(screen, (12, 29, 42), display, border_radius=5)
-        display_color = GREEN if self.result is True else (153, 211, 242)
-        message = self.printer_font.render(self.printer_message, True, display_color)
-        if message.get_width() > display.width - 6:
-            message = pygame.transform.smoothscale(
-                message, (display.width - 6, max(1, round(message.get_height() * (display.width - 6) / message.get_width())))
-            )
-        screen.blit(message, message.get_rect(center=display.center))
-        light = GREEN if self.result is True else RED
-        if self.result is not True and int(self.elapsed * 5) % 2:
-            light = AMBER
-        light_pos = (printer.x + int(printer.width * 0.055), printer.y + int(printer.height * 0.37))
-        pygame.draw.circle(screen, (30, 36, 43), light_pos, 10)
-        pygame.draw.circle(screen, light, light_pos, 7)
-
-    def _draw_paper(self, screen: pygame.Surface, width: int, height: int) -> None:
-        printer = self._printer_rect(width, height)
-        slot_x = printer.x + int(printer.width * 0.34)
-        slot_y = printer.y + int(printer.height * 0.70)
-        progress = max(0.0, min(1.0, self.extraction / 100))
-        twitch = int(math.sin(self.pull_flash * 100) * 5) if self.pull_flash > 0 else 0
-        visible_width = max(82, int(self.paper_art.get_width() * (0.16 + progress * 0.84)))
-        paper = pygame.transform.smoothscale(self.paper_art, (visible_width, self.paper_art.get_height()))
-        paper = pygame.transform.rotate(paper, -2 + math.sin(self.pull_flash * 80) * 2 if self.pull_flash > 0 else -2)
-        paper_rect = paper.get_rect(midright=(slot_x + 10, slot_y + twitch))
-        screen.blit(paper, paper_rect)
-
-        pile_layers = int(progress * 8)
-        base_y = int(height * 0.68)
-        for layer in range(pile_layers):
-            sheet = pygame.transform.rotate(self.paper_pile_art, -7 + (layer % 4) * 5)
-            x = int(width * 0.06) + int(math.sin(layer * 1.7) * 24)
-            y = base_y + layer * 10
-            screen.blit(sheet, sheet.get_rect(midleft=(x, y)))
+        self.state_art = [pygame.transform.smoothscale(source, (width, height)) for source in self.state_sources]
 
     def _draw_hud(self, screen: pygame.Surface, width: int, height: int) -> None:
         title = self.title_font.render("ONE LAST PRINT", True, INK)
