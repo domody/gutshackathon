@@ -39,6 +39,8 @@ WHITE = (250, 250, 247)
 class ContractSigningDay(Minigame):
     title = "Contract Signing Day"
     objective = "Trace every line to sign your name and complete both employment documents."
+    success_title = "PAPERWORK COMPLETE"
+    success_description = "Welcome aboard. Legal will be in touch."
     tracker_cls = HandTracker
 
     def __init__(self, screen: pygame.Surface, tracker: HandTracker | None = None) -> None:
@@ -379,13 +381,6 @@ class ContractSigningDay(Minigame):
         else:
             info = "No camera found"
         draw_status_line(screen, self.small_font, info, WHITE)
-
-        if self.result is not None:
-            overlay = pygame.Surface((width, height), pygame.SRCALPHA)
-            overlay.fill((15, 24, 31, 225))
-            screen.blit(overlay, (0, 0))
-            draw_text_centered(screen, self.heading_font, "PAPERWORK COMPLETE", GREEN, (width // 2, height // 2 - 40))
-            draw_text_centered(screen, self.font, "Welcome aboard. Legal will be in touch.", WHITE, (width // 2, height // 2 + 25))
 
     def _draw_desk(self, screen: pygame.Surface, width: int, height: int) -> None:
         self._prepare_desk(width, height)

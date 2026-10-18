@@ -43,6 +43,8 @@ MUTED = (134, 143, 149)
 class OneLastPrint(CalibratedMinigame):
     title = "One Last Print"
     objective = "Clear the paper jam before 17:00 by pulling with alternating hands."
+    success_title = "PRINT JOB COMPLETE"
+    success_description = "17:00. You are officially off the clock."
     tracker_cls = PullTracker
     calibrate_timeout = 6.0
     distance_tolerance = 0.42
@@ -243,7 +245,7 @@ class OneLastPrint(CalibratedMinigame):
             draw_text_centered(screen, self.title_font, "PRINTER SETUP", WHITE, (width // 2, height // 2 - 115))
             self.draw_calibration(screen)
 
-        if self.result is not None:
+        if self.result is False:
             self._draw_result(screen, width, height)
 
     def _draw_scene(self, screen: pygame.Surface, width: int, height: int) -> None:

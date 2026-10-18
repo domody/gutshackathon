@@ -33,6 +33,8 @@ SHADOW = (18, 30, 40, 75)
 class DodgeTheManager(FaceMinigame):
     title = "Any Volunteers?"
     objective = "Stay out of the manager's path or you will be volunteered for extra paperwork."
+    success_title = "MADE IT TO YOUR DESK"
+    success_description = "No extra jobs. Nicely avoided."
 
     def __init__(self, screen: pygame.Surface, tracker: FaceTracker | None = None) -> None:
         super().__init__(screen, tracker)

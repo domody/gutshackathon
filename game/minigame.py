@@ -28,6 +28,8 @@ class Minigame(ABC):
     MIN_SCORE = 200
     title: str = "Minigame"
     objective: str = "Complete the task before time runs out."
+    success_title: str = "TASK COMPLETE"
+    success_description: str = "Good work."
     tracker_cls: type[CameraTracker] | None = None  # Set this to enable camera tracking.
 
     def __init__(self, screen: pygame.Surface, tracker: CameraTracker | None = None) -> None:

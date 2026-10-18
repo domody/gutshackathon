@@ -34,6 +34,8 @@ def chroma_surface(name: str) -> pygame.Surface:
 class MergeRequestReview(Minigame):
     title = "Merge Request Review"
     objective = "Accept safe merge requests with checks and reject risky requests with crosses."
+    success_title = "REVIEWS CLEARED"
+    success_description = "The safe changes are on their way."
     tracker_cls = HandTracker
 
     def __init__(self, screen: pygame.Surface, tracker: HandTracker | None = None) -> None:

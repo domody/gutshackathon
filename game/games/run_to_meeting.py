@@ -50,6 +50,8 @@ BAR_BACK = (58, 70, 80)
 class RunToMeeting(CalibratedMinigame):
     title = "Act Natural"
     objective = "Reach the meeting quickly, but make sure no colleagues catch you running in the hallway."
+    success_title = "YOU MADE IT"
+    success_description = "Just in time for the meeting."
     tracker_cls = BodyTracker
     distance_tolerance = 0.38
 
@@ -279,7 +281,7 @@ class RunToMeeting(CalibratedMinigame):
 
         if self.intro_timer > 0 and self.mode == "play":
             self._draw_intro(screen, width, height)
-        if self.result is not None:
+        if self.result is False:
             self._draw_result(screen, width, height)
 
     def _draw_hallway(self, screen: pygame.Surface, width: int, height: int, horizon: int) -> None:
@@ -374,7 +376,7 @@ class RunToMeeting(CalibratedMinigame):
 
     def _draw_hud(self, screen: pygame.Surface, width: int, height: int) -> None:
         remaining = max(0, math.ceil(MEETING_SECONDS - self.elapsed))
-        timer = self.countdown_font.render(f"Meeting starts in 00:{remaining:02d}", True, WHITE)
+        timer = self.countdown_font.render(f"TIME TO REACH MEETING  00:{remaining:02d}", True, WHITE)
         timer_box = timer.get_rect(topleft=(22, 18)).inflate(24, 14)
         pygame.draw.rect(screen, NAVY, timer_box, border_radius=10)
         screen.blit(timer, timer.get_rect(center=timer_box.center))
@@ -431,7 +433,7 @@ class RunToMeeting(CalibratedMinigame):
         draw_text_centered(screen, self.heading_font, "LATE FOR YOUR MEETING", AMBER, (width // 2, height // 2 - 95))
         draw_text_centered(screen, self.font, "Run when the hallway is clear.", WHITE, (width // 2, height // 2 - 25))
         draw_text_centered(screen, self.font, "Stand still to walk casually past colleagues.", WHITE, (width // 2, height // 2 + 22))
-        draw_text_centered(screen, self.small_font, "The meeting clock starts when this message disappears.", PALE_BLUE, (width // 2, height // 2 + 78))
+        draw_text_centered(screen, self.small_font, "The 30 second hallway timer starts when this message disappears.", PALE_BLUE, (width // 2, height // 2 + 78))
 
     def _draw_result(self, screen: pygame.Surface, width: int, height: int) -> None:
         overlay = pygame.Surface((width, height), pygame.SRCALPHA)

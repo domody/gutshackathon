@@ -185,6 +185,24 @@ class EmployeeDayTests(unittest.TestCase):
         self.assertEqual(clock.minutes, 1020)
         self.assertEqual(clock.progress, 1)
 
+    def test_story_schedule_matches_the_workday_order(self):
+        clock = WorkdayClock()
+        expected = (
+            ("Contract Signing Day", "09:00"),
+            ("Act Natural", "09:25"),
+            ("Who's Talking?", "09:30"),
+            ("Any Volunteers?", "10:45"),
+            ("A Quick Favour", "11:00"),
+            ("Merge Request Review", "13:00"),
+            ("Coffee Run", "15:30"),
+            ("One Last Print", "16:59"),
+        )
+        for title, stamp in expected:
+            clock.enter(title)
+            self.assertEqual(clock.stamp, stamp)
+        clock.complete()
+        self.assertEqual(clock.stamp, "17:00")
+
     def test_instructions_hide_gameplay_and_clock_until_they_finish(self):
         from game.settings import Settings
 
@@ -320,8 +338,8 @@ class EmployeeDayTests(unittest.TestCase):
 
         game.update(0.01)
 
-        self.assertEqual(game.ui.current.TITLE, "You Passed!")
-        self.assertEqual(game.ui.current.DESCRIPTION, "Great job today!")
+        self.assertEqual(game.ui.current.TITLE, "PRINT JOB COMPLETE")
+        self.assertEqual(game.ui.current.DESCRIPTION, "17:00. You are officially off the clock.")
 
     def test_final_review_renders_missing_and_present_keepsakes(self):
         with tempfile.TemporaryDirectory() as temporary:
