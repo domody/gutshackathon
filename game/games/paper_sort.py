@@ -45,6 +45,7 @@ def _load_documents() -> dict[str, pygame.Surface]:
 
 class PaperSort(Minigame):
     title = "A Quick Favour"
+    objective = "Sort every document into the correct tray before your manager returns."
     tracker_cls = HandTracker
 
     def __init__(self, screen: pygame.Surface, tracker: HandTracker | None = None) -> None:
@@ -155,8 +156,10 @@ class PaperSort(Minigame):
         self.flash = 0.55
         self.transition_t = 0.38
         if direction == expected:
+            self.register_combo_success()
             self.message = "Filed correctly"
         else:
+            self.reset_combo()
             self.mistakes += 1
             self.message = "Wrong pile"
         self.armed = False

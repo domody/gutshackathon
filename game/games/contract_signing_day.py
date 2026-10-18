@@ -37,6 +37,7 @@ WHITE = (250, 250, 247)
 
 class ContractSigningDay(Minigame):
     title = "Contract Signing Day"
+    objective = "Trace every line to sign your name and complete both employment documents."
     tracker_cls = HandTracker
 
     def __init__(self, screen: pygame.Surface, tracker: HandTracker | None = None) -> None:

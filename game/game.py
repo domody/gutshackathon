@@ -239,6 +239,7 @@ class Game:
             self.ui.draw(self.screen)
         elif self.minigame:
             self.minigame.draw(self.screen)
+            self.minigame.draw_combo(self.screen)
         if self.minigame and not getattr(self.ui.current, "suppress_corner_score", False):
             tracker = self.minigame.tracker
             result_screen = self.ui.current
