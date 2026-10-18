@@ -78,7 +78,9 @@ class Game:
         self.minigame.close()
         self.navigation_tracker.start()
         self.pinch_was_down = False
-        self._show_scene_sequence(BEFORE_SCENES.get(cls, ()), self.show_onboarding)
+        self.show_workday_chapter(
+            lambda: self._show_scene_sequence(BEFORE_SCENES.get(cls, ()), self.show_onboarding)
+        )
 
     def show_onboarding(self) -> None:
         if isinstance(self.minigame, ContractSigningDay) and not self.photo_offered:
@@ -89,15 +91,15 @@ class Game:
             self.ui.show(BadgePhotoScreen(
                 self.navigation_tracker,
                 self.employee_record,
-                lambda: self.ui.dismiss(self.show_workday_chapter),
+                lambda: self.ui.dismiss(self.show_intro),
             ))
             return
-        self.show_workday_chapter()
+        self.show_intro()
 
-    def show_workday_chapter(self) -> None:
+    def show_workday_chapter(self, after: Callable[[], None] | None = None) -> None:
         self.ui.show(WorkdayChapterScreen(
             self.workday,
-            lambda: self.ui.dismiss(self.show_intro),
+            lambda: self.ui.dismiss(after or self.show_intro),
         ))
 
     def _show_scene_sequence(self, scenes: tuple[Scene, ...], after: Callable[[], None]) -> None:
@@ -105,15 +107,12 @@ class Game:
             after()
             return
         scene = scenes[0]
-        backdrop = self.minigame.draw if self.minigame else None
         self.ui.show(SceneScreen(
             scene.image,
             scene.text,
             scene.speaker,
             lambda: self.ui.dismiss(
                 lambda: self._show_scene_sequence(scenes[1:], after),
-                fade_background=True,
-                backdrop=backdrop,
             ),
         ))
 
@@ -140,7 +139,7 @@ class Game:
         self.ui.show(self.menu)
 
     def show_intro(self) -> None:
-        """Overlay the intro on the minigame's first frame."""
+        """Show instructions before the minigame starts."""
         if self.minigame:
             self.ui.show(MinigameIntro(self.minigame, self.begin_minigame))
 
@@ -220,6 +219,9 @@ class Game:
                     )
                     if not self.minigame.won:
                         screen.DESCRIPTION = f"Strike {self.strikes} of 3."
+                    elif game_type is OneLastPrint:
+                        screen.TITLE = "You Passed!"
+                        screen.DESCRIPTION = "Great job today!"
                 self.ui.show(screen, backdrop=self.minigame.draw)
 
     def _update_pinch_navigation(self) -> None:
@@ -251,7 +253,7 @@ class Game:
             )
         if self.minigame and not isinstance(
             self.ui.current,
-            (BadgePhotoScreen, FinalScoreScreen, WorkdayChapterScreen),
+            (BadgePhotoScreen, FinalScoreScreen, MinigameIntro, WorkdayChapterScreen),
         ):
             self.workday.draw(self.screen)
         pygame.display.flip()

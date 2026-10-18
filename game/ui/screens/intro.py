@@ -23,11 +23,12 @@ class MinigameIntro(Screen):
     BUTTON_HOVER = (110, 230, 150)
     BUTTON_TEXT = (20, 20, 30)
 
-    OVERLAY_COLOR = (12, 12, 22, 185)  # Darken the first game frame by about 72 percent.
+    OVERLAY_COLOR = (12, 12, 22, 185)
 
     fade_in = 0.4
     fade_out = 0.5
-    overlay = True
+    overlay = False
+    suppress_corner_score = True
 
     def __init__(self, minigame: Minigame, on_okay: Callable[[], None]) -> None:
         self.minigame = minigame

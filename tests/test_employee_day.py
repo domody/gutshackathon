@@ -4,8 +4,9 @@ from pathlib import Path
 import tempfile
 import threading
 import time
+from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
@@ -13,10 +14,17 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 import pygame
 
 from game.employee import EmployeeRecord, normalize_signature
+from game.game import Game
+from game.games import ContractSigningDay
+from game.games.one_last_print import OneLastPrint
+from game.minigame import Action
+from game.scenes import AFTER_SCENES, BEFORE_SCENES
 from game.tracking.camera import CameraTracker
 from game.ui.screens.badge_photo import BadgePhotoScreen
 from game.ui.screens.final_score import FinalScoreScreen
-from game.workday import WorkdayClock
+from game.ui.screens.intro import MinigameIntro
+from game.ui.screens.scene import SceneScreen
+from game.workday import WorkdayChapterScreen, WorkdayClock
 
 
 class FakeCamera:
@@ -172,6 +180,144 @@ class EmployeeDayTests(unittest.TestCase):
         clock.complete()
         self.assertEqual(clock.minutes, 1020)
         self.assertEqual(clock.progress, 1)
+
+    def test_instructions_hide_gameplay_and_clock_until_they_finish(self):
+        from game.settings import Settings
+
+        game = Game(Settings(fullscreen=False, window_size=(1280, 720)))
+        minigame = SimpleNamespace(
+            title="Test round",
+            actions=(Action("Action one", "First action"), Action("Action two", "Second action")),
+            small_font=pygame.font.Font(None, 24),
+            tracker=None,
+            draw=Mock(),
+        )
+        game.minigame = minigame
+        game.workday.draw = Mock()
+        game.ui.show(MinigameIntro(minigame, lambda: None))
+
+        game.draw()
+
+        self.assertFalse(game.ui.current.overlay)
+        self.assertTrue(game.ui.current.suppress_corner_score)
+        minigame.draw.assert_not_called()
+        game.workday.draw.assert_not_called()
+
+        game.ui.clear()
+        game.draw()
+
+        minigame.draw.assert_called_once_with(game.screen)
+        game.workday.draw.assert_called_once_with(game.screen)
+
+    def test_next_round_shows_clock_before_scenes_and_onboarding(self):
+        from game.settings import Settings
+
+        with patch.object(CameraTracker, "start", lambda self: None), \
+                patch.object(CameraTracker, "stop", lambda self: None):
+            game = Game(Settings(fullscreen=False, window_size=(1280, 720)))
+            game.remaining = [ContractSigningDay]
+
+            game.next_minigame()
+
+            self.assertIsInstance(game.ui.current, WorkdayChapterScreen)
+            self.assertEqual(game.workday.stamp, "09:00")
+
+            game.ui.current.gesture_continue()
+            game.ui.update(0.5)
+            self.assertIsInstance(game.ui.current, SceneScreen)
+
+            game.ui.current.gesture_continue()
+            game.ui.current.draw(game.screen)
+            game.ui.current.gesture_continue()
+            game.ui.update(0.5)
+            self.assertIsInstance(game.ui.current, BadgePhotoScreen)
+
+            game.ui.current.on_continue()
+            game.ui.update(0.31)
+            self.assertIsInstance(game.ui.current, MinigameIntro)
+
+    def test_opening_scenes_never_reveal_gameplay_when_dismissed(self):
+        from game.settings import Settings
+
+        game = Game(Settings(fullscreen=False, window_size=(1280, 720)))
+        for scenes in BEFORE_SCENES.values():
+            minigame_draw = Mock()
+            game.minigame = SimpleNamespace(
+                small_font=pygame.font.Font(None, 24),
+                tracker=None,
+                draw=minigame_draw,
+            )
+            continued = Mock()
+            game._show_scene_sequence(scenes, continued)
+
+            scene = game.ui.current
+            self.assertIsInstance(scene, SceneScreen)
+            scene.gesture_continue()
+            scene.draw(game.screen)
+            scene.gesture_continue()
+
+            self.assertTrue(game.ui.leaving)
+            self.assertIsNone(game.ui._backdrop)
+            game.draw()
+            minigame_draw.assert_not_called()
+
+            game.ui.update(scene.fade_out)
+            continued.assert_called_once_with()
+            game.ui.clear()
+
+    def test_after_scenes_do_not_reveal_finished_minigame(self):
+        from game.settings import Settings
+
+        game = Game(Settings(fullscreen=False, window_size=(1280, 720)))
+        for game_type, scenes in AFTER_SCENES.items():
+            minigame_draw = Mock()
+            game.minigame = SimpleNamespace(
+                small_font=pygame.font.Font(None, 24),
+                tracker=None,
+                draw=minigame_draw,
+            )
+            game.remaining = []
+            show_final_score = Mock()
+            game.show_final_score = show_final_score
+
+            game._after_result(game_type, won=True)
+
+            scene = game.ui.current
+            self.assertIsInstance(scene, SceneScreen)
+            scene.gesture_continue()
+            scene.draw(game.screen)
+            scene.gesture_continue()
+
+            self.assertTrue(game.ui.leaving)
+            self.assertIsNone(game.ui._backdrop)
+            game.draw()
+            minigame_draw.assert_not_called()
+
+            game.ui.update(scene.fade_out)
+            show_final_score.assert_called_once_with()
+            game.ui.clear()
+
+    def test_final_printer_pass_screen_marks_end_of_day(self):
+        from game.settings import Settings
+
+        game = Game(Settings(fullscreen=False, window_size=(1280, 720)))
+        minigame = object.__new__(OneLastPrint)
+        minigame.close = Mock()
+        minigame.finished = True
+        minigame.day_strikes = 0
+        minigame._score = 900
+        minigame.won = True
+        minigame.title = "One Last Print"
+        minigame.strike_limit = 3
+        minigame.draw = Mock()
+        minigame.tracker = None
+        game.minigame = minigame
+        game.navigation_tracker.start = Mock()
+
+        game.update(0.01)
+
+        self.assertEqual(game.ui.current.TITLE, "You Passed!")
+        self.assertEqual(game.ui.current.DESCRIPTION, "Great job today!")
 
     def test_final_review_renders_missing_and_present_keepsakes(self):
         with tempfile.TemporaryDirectory() as temporary:
