@@ -219,9 +219,9 @@ class Game:
                     )
                     if not self.minigame.won:
                         screen.DESCRIPTION = f"Strike {self.strikes} of 3."
-                    elif game_type is OneLastPrint:
-                        screen.TITLE = "You Passed!"
-                        screen.DESCRIPTION = "Great job today!"
+                    else:
+                        screen.TITLE = self.minigame.success_title
+                        screen.DESCRIPTION = self.minigame.success_description
                 self.ui.show(screen, backdrop=self.minigame.draw)
 
     def _update_pinch_navigation(self) -> None:
@@ -241,7 +241,9 @@ class Game:
             self.ui.draw(self.screen)
         elif self.minigame:
             self.minigame.draw(self.screen)
-            self.minigame.draw_combo(self.screen)
+            draw_combo = getattr(self.minigame, "draw_combo", None)
+            if draw_combo:
+                draw_combo(self.screen)
         if self.minigame and not getattr(self.ui.current, "suppress_corner_score", False):
             tracker = self.minigame.tracker
             result_screen = self.ui.current

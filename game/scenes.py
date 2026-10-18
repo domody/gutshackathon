@@ -16,7 +16,7 @@ BEFORE_SCENES: dict[type[Minigame], tuple[Scene, ...]] = {
         Scene("receptionist_welcome", "Welcome to JPMorganChase. Let's get you checked in for your first day.", "Receptionist"),
     ),
     RunToMeeting: (
-        Scene("receptionist_late", "Your meeting has already started. You should probably run.", "Receptionist"),
+        Scene("receptionist_late", "Your meeting starts at 09:30. You have five minutes to get upstairs.", "Receptionist"),
     ),
     WhosTalking: (
         Scene("metting_late", "There you are. Sit down and try to follow who's speaking.", "Colleague"),
@@ -31,7 +31,7 @@ BEFORE_SCENES: dict[type[Minigame], tuple[Scene, ...]] = {
         Scene("desk", "Back at your desk, the merge requests are already piling up."),
     ),
     CoffeeRun: (
-        Scene("boss_coffee", "Before you go, could you grab me some coffee?", "Boss"),
+        Scene("boss_coffee", "Do you mind grabbing me a coffee real quick?", "Boss"),
     ),
     OneLastPrint: (
         Scene("printer", "One last print. Then you can go home."),

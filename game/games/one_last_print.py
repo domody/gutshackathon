@@ -6,6 +6,7 @@ from statistics import median
 
 import pygame
 
+from game.audio import sound_bank
 from game.assets import get_font, load_image
 from game.calibrated_minigame import CalibratedMinigame
 from game.minigame import Action
@@ -42,6 +43,8 @@ MUTED = (134, 143, 149)
 class OneLastPrint(CalibratedMinigame):
     title = "One Last Print"
     objective = "Clear the paper jam before 17:00 by pulling with alternating hands."
+    success_title = "PRINT JOB COMPLETE"
+    success_description = "17:00. You are officially off the clock."
     tracker_cls = PullTracker
     calibrate_timeout = 6.0
     distance_tolerance = 0.42
@@ -219,6 +222,7 @@ class OneLastPrint(CalibratedMinigame):
         self.idle_time = 0.0
         self.total_pulls += 1
         self.register_combo_success()
+        sound_bank.play("pull")
         self.status = f"Good pull! Reach with your {self.expected_side} hand"
 
     def _set_result(self, won: bool) -> None:
@@ -241,7 +245,7 @@ class OneLastPrint(CalibratedMinigame):
             draw_text_centered(screen, self.title_font, "PRINTER SETUP", WHITE, (width // 2, height // 2 - 115))
             self.draw_calibration(screen)
 
-        if self.result is not None:
+        if self.result is False:
             self._draw_result(screen, width, height)
 
     def _draw_scene(self, screen: pygame.Surface, width: int, height: int) -> None:

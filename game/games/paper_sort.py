@@ -4,6 +4,7 @@ import random
 
 import pygame
 
+from game.audio import sound_bank
 from game.assets import get_font, key_pink, load_image
 from game.minigame import Action, Minigame
 from game.tracking import HandTracker
@@ -46,6 +47,8 @@ def _load_documents() -> dict[str, pygame.Surface]:
 class PaperSort(Minigame):
     title = "A Quick Favour"
     objective = "Sort every document into the correct tray before your manager returns."
+    success_title = "FILES SORTED"
+    success_description = "Everything landed in the right tray."
     tracker_cls = HandTracker
 
     def __init__(self, screen: pygame.Surface, tracker: HandTracker | None = None) -> None:
@@ -159,9 +162,11 @@ class PaperSort(Minigame):
         self.transition_t = 0.38
         if direction == expected:
             self.register_combo_success()
+            sound_bank.play("paper")
             self.message = "Filed correctly"
         else:
             self.reset_combo()
+            sound_bank.play("mistake")
             self.mistakes += 1
             self.message = "Wrong pile"
         self.armed = False
@@ -209,12 +214,12 @@ class PaperSort(Minigame):
         info = "Hand tracking on" if self.tracker.available else "No camera"
         draw_status_line(screen, self.small_font, info, WHITE)
 
-        if self.result is not None:
+        if self.result is False:
             overlay = pygame.Surface((width, height), pygame.SRCALPHA)
             overlay.fill((8, 28, 47, 190))
             screen.blit(overlay, (0, 0))
-            heading = "FILES SORTED" if self.result else "FILING DISASTER"
-            draw_text_centered(screen, self.title_font, heading, GREEN if self.result else RED,
+            heading = "FILING DISASTER"
+            draw_text_centered(screen, self.title_font, heading, RED,
                                (width // 2, height // 2 - 25))
             draw_text_centered(screen, self.font, self.message, WHITE, (width // 2, height // 2 + 28))
 

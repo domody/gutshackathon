@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import pygame
 
+from game.audio import sound_bank
 from game.assets import get_font
 
 if TYPE_CHECKING:
@@ -27,6 +28,8 @@ class Minigame(ABC):
     MIN_SCORE = 200
     title: str = "Minigame"
     objective: str = "Complete the task before time runs out."
+    success_title: str = "TASK COMPLETE"
+    success_description: str = "Good work."
     tracker_cls: type[CameraTracker] | None = None  # Set this to enable camera tracking.
 
     def __init__(self, screen: pygame.Surface, tracker: CameraTracker | None = None) -> None:
@@ -83,6 +86,7 @@ class Minigame(ABC):
             label = "NICE WORK"
         self.combo_message = f"{label}  x{self.combo}"
         self.combo_until = pygame.time.get_ticks() + 1050
+        sound_bank.play("combo")
 
     def reset_combo(self) -> None:
         self.combo = 0

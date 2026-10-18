@@ -5,7 +5,8 @@ import random
 
 import pygame
 
-from game.assets import load_image
+from game.audio import sound_bank
+from game.assets import get_font, load_image
 from game.face_minigame import FaceMinigame
 from game.minigame import Action
 from game.tracking import FaceTracker
@@ -59,6 +60,8 @@ def classify_direction(yaw_off: float) -> str:
 class WhosTalking(FaceMinigame):
     title = "Who's Talking?"
     objective = "Look toward each colleague while they speak, then face forward for the presenter."
+    success_title = "MEETING SURVIVED"
+    success_description = "You looked appropriately engaged."
     after_calibration = "ready"
 
     def __init__(self, screen: pygame.Surface, tracker: FaceTracker | None = None, *,
@@ -152,6 +155,7 @@ class WhosTalking(FaceMinigame):
         if self.hold >= HOLD_SECONDS and self.talking_t >= SPEAK_SECONDS:
             self.done += 1
             self.register_combo_success()
+            sound_bank.play("correct")
             self.feedback = random.choice(("NATURAL.", "GOOD LISTENING.", "NAILED IT."))
             self.feedback_t = 0.65
             if self.done >= TARGET_TURNS:
@@ -163,6 +167,7 @@ class WhosTalking(FaceMinigame):
         self.turn_left -= dt
         if self.turn_left <= 0.0:
             self.reset_combo()
+            sound_bank.play("mistake")
             self.feedback = "WRONG PERSON."
             self.finish(False)
 
@@ -251,6 +256,7 @@ class WhosTalking(FaceMinigame):
             self._draw_person(screen, direction, positions[direction], int(h * 0.70),
                               direction == self.speaker, self.talking_t)
         self._draw_bubble(screen, positions[self.speaker], self.line)
+        self._draw_gaze_indicator(screen, w)
 
         if self.mode == "ready":
             panel = pygame.Rect(0, 0, min(470, w - 40), 82)
@@ -280,3 +286,20 @@ class WhosTalking(FaceMinigame):
         info = f"Face tracking: {self.tracker.backend}" if self.tracker.available else "Camera tracking unavailable"
         draw_status_line(screen, self.small_font, info)
         self.draw_face_lost(screen, 76)
+
+    def _draw_gaze_indicator(self, screen: pygame.Surface, width: int) -> None:
+        panel = pygame.Rect(0, 0, 306, 58)
+        panel.midtop = (width // 2, 10)
+        layer = pygame.Surface(panel.size, pygame.SRCALPHA)
+        pygame.draw.rect(layer, (7, 34, 66, 224), layer.get_rect(), border_radius=13)
+        pygame.draw.rect(layer, (87, 151, 190, 230), layer.get_rect(), 2, border_radius=13)
+        screen.blit(layer, panel)
+        names = (("left", "LEFT"), ("forward", "CENTRE"), ("right", "RIGHT"))
+        spacing = 88
+        start_x = panel.centerx - spacing
+        for index, (direction, label) in enumerate(names):
+            x = start_x + index * spacing
+            active = self.current == direction
+            pygame.draw.circle(screen, GREEN if active else (96, 119, 137), (x, panel.y + 19), 7)
+            art = get_font(16).render(label, True, WHITE if active else CHASE_LIGHT)
+            screen.blit(art, art.get_rect(midtop=(x, panel.y + 31)))

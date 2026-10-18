@@ -5,6 +5,7 @@ import random
 
 import pygame
 
+from game.audio import sound_bank
 from game.assets import get_font, load_chroma, load_image
 from game.minigame import Action, Minigame
 from game.tracking import HandTracker
@@ -33,6 +34,8 @@ def chroma_surface(name: str) -> pygame.Surface:
 class MergeRequestReview(Minigame):
     title = "Merge Request Review"
     objective = "Accept safe merge requests with checks and reject risky requests with crosses."
+    success_title = "REVIEWS CLEARED"
+    success_description = "The safe changes are on their way."
     tracker_cls = HandTracker
 
     def __init__(self, screen: pygame.Surface, tracker: HandTracker | None = None) -> None:
@@ -134,9 +137,11 @@ class MergeRequestReview(Minigame):
         if self.decision_correct:
             self.correct += 1
             self.register_combo_success()
+            sound_bank.play("correct")
             self.flash_text = "MERGED" if gesture == "palm" else "DECLINED"
         else:
             self.reset_combo()
+            sound_bank.play("mistake")
             self.lives -= 1
             self.flash_text = "THAT SHOULD HAVE BEEN DECLINED" if gesture == "palm" else "THAT ONE WAS SAFE"
             self.shake = 0.35
