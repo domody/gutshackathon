@@ -41,6 +41,7 @@ MUTED = (134, 143, 149)
 
 class OneLastPrint(CalibratedMinigame):
     title = "One Last Print"
+    objective = "Clear the paper jam before 17:00 by pulling with alternating hands."
     tracker_cls = PullTracker
     calibrate_timeout = 6.0
     distance_tolerance = 0.42
@@ -217,6 +218,7 @@ class OneLastPrint(CalibratedMinigame):
         self.pull_flash = 0.34
         self.idle_time = 0.0
         self.total_pulls += 1
+        self.register_combo_success()
         self.status = f"Good pull! Reach with your {self.expected_side} hand"
 
     def _set_result(self, won: bool) -> None:

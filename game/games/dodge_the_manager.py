@@ -32,6 +32,7 @@ SHADOW = (18, 30, 40, 75)
 
 class DodgeTheManager(FaceMinigame):
     title = "Any Volunteers?"
+    objective = "Stay out of the manager's path or you will be volunteered for extra paperwork."
 
     def __init__(self, screen: pygame.Surface, tracker: FaceTracker | None = None) -> None:
         super().__init__(screen, tracker)
@@ -43,7 +44,7 @@ class DodgeTheManager(FaceMinigame):
         self.player_sprite: pygame.Surface | None = None
         self.manager_sprite: pygame.Surface | None = None
         self.manager_flipped: pygame.Surface | None = None
-        self.player_sizes: dict[int, pygame.Surface] = {}
+        self.player_sizes: dict[tuple[int, bool], pygame.Surface] = {}
         self.manager_sizes: dict[tuple[int, bool], pygame.Surface] = {}
         self.start()
 
@@ -74,11 +75,13 @@ class DodgeTheManager(FaceMinigame):
         self.encounters = 0
         self.bubble_t = 0.0
         self.volunteered_t = 0.0
+        self.animation_time = 0.0
 
     def update(self, dt: float) -> None:
         if self.finished:
             return
         dt = min(dt, 0.1)
+        self.animation_time += dt
         if self.mode == "calibrate":
             self.update_calibration(dt)
             return
@@ -159,12 +162,14 @@ class DodgeTheManager(FaceMinigame):
         else:
             self.caught = max(0.0, self.caught - dt / 0.4)
         if p >= 1.0:
+            self.register_combo_success()
             self.phase = "clear"
             self.phase_t = 0.0
             self.clear_duration = random.uniform(1.4, 2.2)
             self.caught = 0.0
 
     def _get_volunteered(self) -> None:
+        self.reset_combo()
         self.phase = "volunteered"
         self.phase_t = 0.0
         self.volunteered_t = 0.0
@@ -192,11 +197,15 @@ class DodgeTheManager(FaceMinigame):
         height = h * (0.36 + (0.115 - 0.36) * perspective)
         return int(x), int(bottom), max(54, int(height))
 
-    def _player_at_height(self, height: int) -> pygame.Surface:
+    def _player_at_height(self, height: int, flipped: bool) -> pygame.Surface:
         height = max(4, round(height / 4) * 4)
-        if height not in self.player_sizes:
-            self.player_sizes[height] = scale_to_height(self.player_sprite, height)
-        return self.player_sizes[height]
+        key = (height, flipped)
+        if key not in self.player_sizes:
+            sprite = scale_to_height(self.player_sprite, height)
+            if flipped:
+                sprite = pygame.transform.flip(sprite, True, False)
+            self.player_sizes[key] = sprite
+        return self.player_sizes[key]
 
     def _manager_at_height(self, height: int) -> pygame.Surface:
         height = max(4, round(height / 4) * 4)
@@ -231,9 +240,10 @@ class DodgeTheManager(FaceMinigame):
 
     def _draw_player(self, screen: pygame.Surface, w: int, h: int) -> None:
         px, bottom, sprite_h = self._project(self.player_u, self.progress, w, h)
-        sprite = self._player_at_height(sprite_h)
-        bob_strength = max(1.0, 4.0 * (1.0 - self.progress) + 1.0)
-        bob = int(math.sin(self.elapsed * 10.0) * bob_strength)
+        flip = int(self.animation_time * 3.0) % 2 == 1
+        sprite = self._player_at_height(sprite_h, flip)
+        bob_strength = max(1.0, 2.7 * (1.0 - self.progress) + 0.8)
+        bob = int(math.sin(self.animation_time * 6.0) * bob_strength)
         bottom += bob
         shadow_w = max(46, sprite.get_width() // 2)
         shadow_h = max(6, int(18 * sprite_h / max(1, h * 0.36)))

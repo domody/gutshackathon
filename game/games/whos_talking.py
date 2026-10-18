@@ -58,6 +58,7 @@ def classify_direction(yaw_off: float) -> str:
 
 class WhosTalking(FaceMinigame):
     title = "Who's Talking?"
+    objective = "Look toward each colleague while they speak, then face forward for the presenter."
     after_calibration = "ready"
 
     def __init__(self, screen: pygame.Surface, tracker: FaceTracker | None = None, *,
@@ -150,6 +151,7 @@ class WhosTalking(FaceMinigame):
 
         if self.hold >= HOLD_SECONDS and self.talking_t >= SPEAK_SECONDS:
             self.done += 1
+            self.register_combo_success()
             self.feedback = random.choice(("NATURAL.", "GOOD LISTENING.", "NAILED IT."))
             self.feedback_t = 0.65
             if self.done >= TARGET_TURNS:
@@ -160,6 +162,7 @@ class WhosTalking(FaceMinigame):
 
         self.turn_left -= dt
         if self.turn_left <= 0.0:
+            self.reset_combo()
             self.feedback = "WRONG PERSON."
             self.finish(False)
 

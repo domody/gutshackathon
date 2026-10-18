@@ -52,6 +52,7 @@ def _load_chroma(filename: str, remove_coffee: bool = False) -> tuple[pygame.Sur
 
 class CoffeeRun(FaceMinigame):
     title = "Coffee Run"
+    objective = "Carry the boss's coffee to the office without spilling the cup."
     after_calibration = "ready"
 
     def __init__(self, screen: pygame.Surface, tracker: FaceTracker | None = None) -> None:

@@ -38,6 +38,7 @@ class MinigameIntro(Screen):
         self._name_font = get_font(self.NAME_SIZE)
         self._desc_font = get_font(self.DESC_SIZE)
         self._button_font = get_font(self.BUTTON_SIZE)
+        self._objective_font = get_font(31)
         self._button_rect = pygame.Rect(0, 0, 0, 0)
         self._writer = Typewriter(60)
         self._dim: pygame.Surface | None = None
@@ -71,8 +72,13 @@ class MinigameIntro(Screen):
 
         title_rect = w.draw(surface, self._title_font, self.minigame.title, self.TITLE_COLOR,
                             midtop=(center_x, height // 8))
+        objective_bottom = title_rect.bottom + 14
+        for line in self._wrap_with_font(self.minigame.objective, width - 180, self._objective_font):
+            objective_rect = w.draw(surface, self._objective_font, line, self.DESC_COLOR,
+                                    midtop=(center_x, objective_bottom))
+            objective_bottom = objective_rect.bottom + 3
         subtitle_rect = w.draw(surface, self._subtitle_font, "HOW TO PLAY", self.TEXT_COLOR,
-                               midtop=(center_x, title_rect.bottom + 30))
+                               midtop=(center_x, objective_bottom + 17))
 
         top = subtitle_rect.bottom + 40
         bottom = top
@@ -98,11 +104,14 @@ class MinigameIntro(Screen):
         return bottom
 
     def _wrap(self, text: str, max_width: int) -> list[str]:
+        return self._wrap_with_font(text, max_width, self._desc_font)
+
+    def _wrap_with_font(self, text: str, max_width: int, font: pygame.font.Font) -> list[str]:
         lines: list[str] = []
         line = ""
         for word in text.split():
             trial = f"{line} {word}".strip()
-            if line and self._desc_font.size(trial)[0] > max_width:
+            if line and font.size(trial)[0] > max_width:
                 lines.append(line)
                 line = word
             else:

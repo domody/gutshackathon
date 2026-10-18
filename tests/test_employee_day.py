@@ -90,6 +90,7 @@ class EmployeeDayTests(unittest.TestCase):
             screen = BadgePhotoScreen(camera, record, lambda: continued.append(True))
             screen.gesture_continue()
             screen.update(3.1)
+            screen.update(screen.FLASH_SECONDS)
             self.assertEqual(screen.mode, "review")
             self.assertIsNone(record.photo)
             camera.gesture = "palm"
@@ -99,6 +100,7 @@ class EmployeeDayTests(unittest.TestCase):
             camera.gesture = None
             screen.gesture_continue()
             screen.update(3.1)
+            screen.update(screen.FLASH_SECONDS)
             screen.gesture_continue()
             self.assertEqual(continued, [True])
             self.assertIsNotNone(record.photo)
@@ -134,6 +136,7 @@ class EmployeeDayTests(unittest.TestCase):
             screen = BadgePhotoScreen(camera, record, lambda: continued.append(True))
             screen.gesture_continue()
             screen.update(3.1)
+            screen.update(screen.FLASH_SECONDS)
             self.assertEqual(screen.mode, "review")
             camera.gesture = "palm"
             screen.update(screen.REVIEW_GESTURE_DELAY)
@@ -142,6 +145,7 @@ class EmployeeDayTests(unittest.TestCase):
             camera.gesture = None
             screen.gesture_continue()
             screen.update(3.1)
+            screen.update(screen.FLASH_SECONDS)
             screen.gesture_continue()
             self.assertEqual(continued, [True])
             self.assertIsNotNone(record.photo)

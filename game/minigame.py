@@ -26,6 +26,7 @@ class Minigame(ABC):
     BASE_SCORE = 1000
     MIN_SCORE = 200
     title: str = "Minigame"
+    objective: str = "Complete the task before time runs out."
     tracker_cls: type[CameraTracker] | None = None  # Set this to enable camera tracking.
 
     def __init__(self, screen: pygame.Surface, tracker: CameraTracker | None = None) -> None:
@@ -36,6 +37,9 @@ class Minigame(ABC):
         self.day_strikes = 0
         self.strike_limit = 3
         self.strike_earned = False
+        self.combo = 0
+        self.combo_message = ""
+        self.combo_until = 0
 
         pygame.font.init()
         self.font = get_font(36)
@@ -61,6 +65,42 @@ class Minigame(ABC):
         self.won = False
         self._score = 0
         self.strike_earned = False
+        self.combo = 0
+        self.combo_message = ""
+        self.combo_until = 0
+
+    def register_combo_success(self) -> None:
+        self.combo += 1
+        if self.combo < 2:
+            return
+        if self.combo >= 8:
+            label = "OFFICE PRODIGY"
+        elif self.combo >= 5:
+            label = "SUSPICIOUSLY COMPETENT"
+        elif self.combo >= 3:
+            label = "ON A ROLL"
+        else:
+            label = "NICE WORK"
+        self.combo_message = f"{label}  x{self.combo}"
+        self.combo_until = pygame.time.get_ticks() + 1050
+
+    def reset_combo(self) -> None:
+        self.combo = 0
+        self.combo_message = ""
+        self.combo_until = 0
+
+    def draw_combo(self, screen: pygame.Surface) -> None:
+        if not self.combo_message or pygame.time.get_ticks() >= self.combo_until:
+            return
+        art = get_font(max(28, min(42, screen.get_height() // 19))).render(
+            self.combo_message, True, (255, 215, 90)
+        )
+        panel = art.get_rect(midtop=(screen.get_width() // 2, int(screen.get_height() * 0.105))).inflate(34, 18)
+        layer = pygame.Surface(panel.size, pygame.SRCALPHA)
+        pygame.draw.rect(layer, (8, 34, 60, 220), layer.get_rect(), border_radius=14)
+        pygame.draw.rect(layer, (82, 190, 145, 230), layer.get_rect(), 2, border_radius=14)
+        screen.blit(layer, panel)
+        screen.blit(art, art.get_rect(center=panel.center))
 
     @property
     def negative_progress(self) -> float:

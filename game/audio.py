@@ -46,6 +46,7 @@ class SoundBank:
             "confirm": ((523.25, 659.25), 0.13, 0.08),
             "success": ((523.25, 659.25, 783.99), 0.27, 0.09),
             "failure": ((293.66, 246.94), 0.24, 0.07),
+            "shutter": ((185.0, 110.0), 0.09, 0.10),
         }
         spec = sounds.get(name)
         if not spec:

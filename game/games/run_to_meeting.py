@@ -48,6 +48,7 @@ BAR_BACK = (58, 70, 80)
 
 class RunToMeeting(CalibratedMinigame):
     title = "Act Natural"
+    objective = "Reach the meeting quickly, but make sure no colleagues catch you running in the hallway."
     tracker_cls = BodyTracker
     distance_tolerance = 0.38
 
@@ -203,6 +204,7 @@ class RunToMeeting(CalibratedMinigame):
             self._finish_game(False)
 
     def _get_caught(self) -> None:
+        self.reset_combo()
         self.caught_this_encounter = True
         self.caught_count += 1
         self.record_strike()
@@ -232,6 +234,8 @@ class RunToMeeting(CalibratedMinigame):
             self.phase = "watching"
             self.phase_duration = random.uniform(WATCH_MIN, WATCH_MAX)
         elif self.phase == "watching":
+            if not self.caught_this_encounter:
+                self.register_combo_success()
             self.phase = "departing"
             self.phase_duration = DEPART_SECONDS
         else:
@@ -300,11 +304,13 @@ class RunToMeeting(CalibratedMinigame):
         progress = max(0.0, min(1.0, self.course / 100))
         sprinting = self.running_detected
         x, bottom, sprite_h = self._project(0.5, progress, width, height)
-        flip = sprinting and int(self.animation_time * 7.0) % 2 == 1
+        cadence = 7.0 if sprinting else 2.8
+        moving = self.intro_timer <= 0 and self.result is None and self.chat_timer <= 0
+        flip = moving and int(self.animation_time * cadence) % 2 == 1
         sprite = self._player_at_height(sprite_h, sprinting, flip)
-        frequency = 13.0 if sprinting else 5.0
+        frequency = 13.0 if sprinting else 5.6
         strength = (5.0 if sprinting else 2.5) * (1.0 - progress) + 1.0
-        bob = int(math.sin(self.animation_time * frequency) * strength)
+        bob = int(math.sin(self.animation_time * frequency) * strength) if moving else 0
         shadow_w = max(24, sprite.get_width() // 2)
         shadow_h = max(5, int(15 * sprite_h / max(1, height * 0.36)))
         shadow = pygame.Surface((shadow_w, shadow_h), pygame.SRCALPHA)
