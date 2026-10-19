@@ -25,3 +25,9 @@ The files remain on the local computer and are never written inside this reposit
 Every run has its own folder containing `employee.json`, plus `photo.png` and `signature.png` when those keepsakes were confirmed or completed.
 
 The clock shown between and during rounds is story time, separate from each minigame countdown. It advances from onboarding at 09:00 to the final print at 16:59 and never moves backwards when optional paperwork is inserted.
+
+## Credits
+
+Hackathon project for Glasgow Uni Tech Society 2026
+
+Worked on equally by Dom Ody, Razvan Tonca, Nelson Hearfield, Drummond Canham
